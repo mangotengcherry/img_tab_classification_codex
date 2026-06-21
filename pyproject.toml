@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fbm-multimodal"
+version = "0.1.0"
+description = "FBM image and electrical measurement multi-label experiment toolkit"
+requires-python = ">=3.11"
+dependencies = [
+  "numpy",
+  "pandas",
+  "pillow",
+  "scikit-learn",
+]
+
+[project.optional-dependencies]
+test = ["pytest"]
+
+[project.scripts]
+fbm-mm = "fbm_multimodal.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

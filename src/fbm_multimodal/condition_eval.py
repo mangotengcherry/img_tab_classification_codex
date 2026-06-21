@@ -241,6 +241,76 @@ def summarize_condition_report(summary: pd.DataFrame, targets: TargetConfig | No
     }
 
 
+def render_condition_report(
+    summary: pd.DataFrame,
+    *,
+    aggregate: pd.DataFrame | None = None,
+    targets: TargetConfig | None = None,
+) -> str:
+    """Render a compact Markdown PASS/FAIL report for condition evaluation."""
+    if targets is None:
+        targets = TargetConfig()
+    lines = [
+        "# FBM Condition Evaluation Report",
+        "",
+        f"- Single Target: {_fmt(targets.single_subset_accuracy)}",
+        f"- Composite Target: {_fmt(targets.composite_subset_accuracy)}",
+        f"- KPI Product Target: {_fmt(targets.kpi_product)}",
+        f"- Minimum Product From Individual Targets: {_fmt(targets.minimum_product_from_individual_targets)}",
+        "",
+    ]
+
+    if summary.empty:
+        lines.extend(["Overall Status: FAIL", "", "No conditions were evaluated."])
+        return "\n".join(lines) + "\n"
+
+    ranked = summary.sort_values(["meets_all_targets", "kpi_product"], ascending=[False, False])
+    best = ranked.iloc[0]
+    passing = bool(best["meets_all_targets"])
+    lines.append(f"Overall Status: {'PASS' if passing else 'FAIL'}")
+    label = "Recommended Condition" if passing else "Best Available Condition"
+    lines.append(f"{label}: {best['condition']}")
+    lines.append(f"Threshold: {_fmt(best['threshold'])}")
+    lines.append(f"Single Subset Accuracy: {_fmt(best['single_subset_accuracy'])}")
+    lines.append(f"Composite Subset Accuracy: {_fmt(best['composite_subset_accuracy'])}")
+    lines.append(f"KPI Product: {_fmt(best['kpi_product'])}")
+    if not passing:
+        lines.append(f"KPI Gap: {_fmt(max(0.0, targets.kpi_product - float(best['kpi_product'])))}")
+        lines.append(f"Composite Needed At Observed Single: {_fmt(best['required_composite_for_kpi_at_single'])}")
+        lines.append(f"Single Needed At Observed Composite: {_fmt(best['required_single_for_kpi_at_composite'])}")
+
+    lines.extend(["", "## Condition Summary", ""])
+    lines.append("| condition | threshold | single | composite | kpi | pass |")
+    lines.append("| --- | ---: | ---: | ---: | ---: | :---: |")
+    for _, row in ranked.iterrows():
+        lines.append(
+            "| "
+            f"{row['condition']} | "
+            f"{_fmt(row['threshold'])} | "
+            f"{_fmt(row['single_subset_accuracy'])} | "
+            f"{_fmt(row['composite_subset_accuracy'])} | "
+            f"{_fmt(row['kpi_product'])} | "
+            f"{'Y' if bool(row['meets_all_targets']) else 'N'} |"
+        )
+
+    if aggregate is not None and not aggregate.empty:
+        lines.extend(["", "## Run Aggregate Summary", ""])
+        lines.append("| condition | runs | mean single | min composite | mean kpi | all runs pass |")
+        lines.append("| --- | ---: | ---: | ---: | ---: | :---: |")
+        for _, row in aggregate.iterrows():
+            lines.append(
+                "| "
+                f"{row['condition']} | "
+                f"{int(row['num_runs'])} | "
+                f"{_fmt(row['single_subset_accuracy_mean'])} | "
+                f"{_fmt(row['composite_subset_accuracy_min'])} | "
+                f"{_fmt(row['kpi_product_mean'])} | "
+                f"{'Y' if bool(row['all_runs_meet_targets']) else 'N'} |"
+            )
+
+    return "\n".join(lines) + "\n"
+
+
 def _validate_prediction_frame(
     frame: pd.DataFrame,
     labels: list[str],
@@ -301,3 +371,12 @@ def _mode_or_first(values: pd.Series) -> float:
     if not modes.empty:
         return float(modes.iloc[0])
     return float(values.iloc[0])
+
+
+def _fmt(value: object) -> str:
+    numeric = float(value)
+    if np.isinf(numeric):
+        return "inf"
+    if np.isnan(numeric):
+        return "nan"
+    return f"{numeric:.3f}"

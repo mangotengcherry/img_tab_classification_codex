@@ -8,6 +8,7 @@ from fbm_multimodal.condition_eval import (
     evaluate_conditions,
     evaluate_threshold_grid,
     load_condition_predictions,
+    render_condition_report,
 )
 
 
@@ -377,3 +378,84 @@ def test_cli_evaluate_conditions_writes_run_aggregate_output(tmp_path):
     assert aggregate.loc[0, "condition"] == "fusion"
     assert aggregate.loc[0, "num_runs"] == 2
     assert not aggregate.loc[0, "all_runs_meet_targets"]
+
+
+def test_render_condition_report_marks_passing_condition():
+    summary = pd.DataFrame(
+        {
+            "condition": ["fusion", "image_only"],
+            "threshold": [0.4, 0.5],
+            "single_subset_accuracy": [0.9, 0.82],
+            "composite_subset_accuracy": [0.75, 0.6],
+            "kpi_product": [0.675, 0.492],
+            "meets_all_targets": [True, False],
+            "required_composite_for_kpi_at_single": [0.7222222222, 0.7926829268],
+            "required_single_for_kpi_at_composite": [0.8666666667, 1.0833333333],
+        }
+    )
+
+    report = render_condition_report(summary)
+
+    assert "# FBM Condition Evaluation Report" in report
+    assert "Overall Status: PASS" in report
+    assert "Recommended Condition: fusion" in report
+    assert "KPI Product: 0.675" in report
+
+
+def test_render_condition_report_marks_failure_and_shortfall():
+    summary = pd.DataFrame(
+        {
+            "condition": ["image_only"],
+            "threshold": [0.5],
+            "single_subset_accuracy": [0.8],
+            "composite_subset_accuracy": [0.6],
+            "kpi_product": [0.48],
+            "meets_all_targets": [False],
+            "required_composite_for_kpi_at_single": [0.8125],
+            "required_single_for_kpi_at_composite": [1.0833333333],
+        }
+    )
+
+    report = render_condition_report(summary)
+
+    assert "Overall Status: FAIL" in report
+    assert "Best Available Condition: image_only" in report
+    assert "Composite Needed At Observed Single: 0.812" in report
+    assert "KPI Gap: 0.170" in report
+
+
+def test_cli_evaluate_conditions_writes_markdown_report(tmp_path):
+    predictions_path = tmp_path / "predictions.csv"
+    summary_path = tmp_path / "summary.csv"
+    report_path = tmp_path / "report.md"
+    rows = []
+    rows += _condition_rows(
+        "fusion",
+        "real_single",
+        truths=[(1, 0), (0, 1)],
+        probs=[(0.9, 0.1), (0.1, 0.9)],
+    )
+    rows += _condition_rows(
+        "fusion",
+        "real_composite",
+        truths=[(1, 1), (1, 1)],
+        probs=[(0.8, 0.7), (0.9, 0.8)],
+    )
+    pd.DataFrame(rows).to_csv(predictions_path, index=False)
+
+    exit_code = main(
+        [
+            "evaluate-conditions",
+            "--predictions",
+            str(predictions_path),
+            "--labels",
+            "a,b",
+            "--output",
+            str(summary_path),
+            "--report-output",
+            str(report_path),
+        ]
+    )
+
+    assert exit_code == 0
+    assert "Overall Status: PASS" in report_path.read_text()

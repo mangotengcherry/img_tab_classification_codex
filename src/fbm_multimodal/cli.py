@@ -13,6 +13,7 @@ from fbm_multimodal.condition_eval import (
     evaluate_conditions,
     evaluate_threshold_grid,
     load_condition_predictions,
+    render_condition_report,
     summarize_condition_report,
 )
 from fbm_multimodal.measurement import MeasurementMap
@@ -62,6 +63,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     evaluate.add_argument("--labels", required=True, help="Comma-separated label names.")
     evaluate.add_argument("--output", required=True, help="Output condition summary CSV path.")
+    evaluate.add_argument("--report-output", default="", help="Optional Markdown PASS/FAIL report output path.")
     evaluate.add_argument("--run-column", default="", help="Optional seed/run column for per-run condition summaries.")
     evaluate.add_argument(
         "--aggregate-output",
@@ -142,6 +144,7 @@ def _evaluate_conditions(args: argparse.Namespace) -> int:
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     summary.to_csv(output_path, index=False)
+    aggregate = None
     if args.aggregate_output:
         if not run_column:
             raise ValueError("--aggregate-output requires --run-column")
@@ -149,6 +152,10 @@ def _evaluate_conditions(args: argparse.Namespace) -> int:
         aggregate_path = Path(args.aggregate_output)
         aggregate_path.parent.mkdir(parents=True, exist_ok=True)
         aggregate.to_csv(aggregate_path, index=False)
+    if args.report_output:
+        report_path = Path(args.report_output)
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        report_path.write_text(render_condition_report(summary, aggregate=aggregate, targets=targets))
     print(json.dumps(summarize_condition_report(summary, targets), ensure_ascii=False, indent=2))
     return 0
 

@@ -97,6 +97,7 @@ PYTHONPATH=src python3 -m fbm_multimodal.cli evaluate-conditions \
   --prediction-glob "outputs/conditions/*.csv" \
   --labels defect_a,defect_b,defect_c \
   --output outputs/condition_by_seed.csv \
+  --report-output outputs/condition_report.md \
   --run-column seed \
   --aggregate-output outputs/condition_aggregate.csv \
   --threshold-grid 0.30,0.35,0.40,0.45,0.50,0.55,0.60 \
@@ -106,6 +107,7 @@ PYTHONPATH=src python3 -m fbm_multimodal.cli evaluate-conditions \
 ```
 
 The aggregate report includes mean, standard deviation, min, max, and whether all runs meet the targets.
+The Markdown report states PASS/FAIL, the recommended condition, the selected threshold, and the remaining KPI gap when no condition passes.
 
 Expected prediction columns:
 

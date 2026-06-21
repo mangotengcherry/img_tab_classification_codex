@@ -203,8 +203,13 @@ product KPI `0.65`를 만족하려면, single subset accuracy가 `0.8`인 condit
 ### 실행
 
 ```bash
-PYTHONPATH=src python3 examples/run_fusion_experiment.py      # 학습→평가→시각화 (numpy만, ~1초)
-PYTHONPATH=src python3 -m fbm_multimodal.fusion \             # 예측 CSV만으로 진단 리포트
+PYTHONPATH=src python3 examples/run_fusion_experiment.py
+```
+
+예측 CSV만으로 fusion 진단 리포트를 다시 만들 때:
+
+```bash
+PYTHONPATH=src python3 -m fbm_multimodal.fusion \
   --predictions reports/fusion_predictions.csv \
   --labels edge_ring,center_blob,leak_top,leak_bottom \
   --identity-labels leak_top,leak_bottom
@@ -217,15 +222,16 @@ loader로 교체하면 됩니다(컬럼 형식은 quickstart 참고). 같은 예
 
 | head | single acc | composite acc | **KPI product** |
 |---|---|---|---|
-| image_only | 0.70 | 0.65 | 0.45 |
-| tabular_only | 1.00 | 0.50 | 0.50 |
-| **fusion** | **1.00** | **0.88** | **0.88** |
+| image_only | 0.678 | 0.517 | 0.350 |
+| tabular_only | 1.000 | 0.567 | 0.567 |
+| **fusion** | **0.983** | **0.983** | **0.967** |
 
-fusion KPI **0.88** ≫ best unimodal **0.50** (gain **+0.38**). 정체성 클래스(이미지로 동일)에서
-tabular가 image를 **+0.38** 앞서고, 진짜 ablation에서 tabular 기여 **+0.39** → fusion이 tabular를
+fusion KPI **0.967** ≫ best unimodal **0.567** (gain **+0.400**). 정체성 클래스(이미지로 동일)에서
+tabular가 image를 **+0.455** 앞서고, 진짜 ablation에서 tabular 기여 **+0.446** → fusion이 tabular를
 실제로 사용(collapse 아님).
 
 ![dataset](reports/figures/01_dataset_overview.png)
+![pattern gallery](reports/figures/06_pattern_gallery.png)
 ![kpi](reports/figures/04_kpi_product.png)
 ![identity & collapse](reports/figures/05_identity_and_collapse.png)
 

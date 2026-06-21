@@ -22,6 +22,7 @@ Built-in structure:
 from __future__ import annotations
 
 from dataclasses import dataclass
+from itertools import combinations
 
 import numpy as np
 
@@ -113,6 +114,8 @@ def generate_dataset(
     """Generate a train/test FBM fusion dataset with the modality asymmetry."""
     rng = np.random.default_rng(seed)
     n_lab = len(LABELS)
+    all_pairs = [list(pair) for pair in combinations(range(n_lab), 2)]
+    pair_offsets: dict[tuple[str, str], int] = {}
 
     images: list[np.ndarray] = []
     tabular: list[np.ndarray] = []
@@ -121,6 +124,12 @@ def generate_dataset(
     splits: list[str] = []
     chip_ids: list[str] = []
     counter = 0
+
+    def next_pair(split: str, group: str) -> list[int]:
+        key = (split, group)
+        offset = pair_offsets.get(key, 0)
+        pair_offsets[key] = offset + 1
+        return list(all_pairs[offset % len(all_pairs)])
 
     def add_single(split: str) -> tuple[np.ndarray, list[int]]:
         nonlocal counter
@@ -140,7 +149,7 @@ def generate_dataset(
 
     def add_real_composite(split: str) -> None:
         nonlocal counter
-        pair = list(rng.choice(n_lab, size=2, replace=False))
+        pair = next_pair(split, "real_composite")
         img = _image_for(pair, rng)
         tab = _tabular_for(pair, rng)
         y = [1 if i in pair else 0 for i in range(n_lab)]
@@ -154,7 +163,7 @@ def generate_dataset(
 
     def add_synth_composite(split: str) -> None:
         nonlocal counter
-        pair = list(rng.choice(n_lab, size=2, replace=False))
+        pair = next_pair(split, "synthetic_composite")
         img_a = _image_for([pair[0]], rng)
         img_b = _image_for([pair[1]], rng)
         img = _compose_images(img_a, img_b)

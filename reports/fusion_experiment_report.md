@@ -1,91 +1,101 @@
-# Fusion Experiment Report — Image + Tabular under Modality Asymmetry
+# Image + Tabular Fusion 실험 리포트
 
-> 자동 생성 실험 리포트. 재생성: `PYTHONPATH=src python3 examples/run_fusion_experiment.py`
-> 배경/설계: [../docs/multimodal_fusion_guide.md](../docs/multimodal_fusion_guide.md) ·
+> 재현 명령어: `PYTHONPATH=src python3 examples/run_fusion_experiment.py`
+> 설계 배경: [../docs/multimodal_fusion_guide.md](../docs/multimodal_fusion_guide.md)
 > 평가기 사용법: [../docs/fusion_eval_quickstart.md](../docs/fusion_eval_quickstart.md)
 
-## 질문
+## 한 줄 결론
 
-> "이미지는 합성·증강이 가능하지만 tabular(전기 MSR)는 합성이 불가능한데, image와 tabular를
-> fusion해서 학습이 되는가?"
+이번 데모 실험에서는 **image와 tabular를 함께 쓰는 fusion이 가장 좋았습니다.**
 
-이 실험은 **된다**는 것을, 그리고 **어떤 조건에서 되는지**를 end-to-end로 보입니다.
-모델은 numpy만으로 구현된 3-head fusion 네트워크이며, 핵심은 모델 크기가 아니라
-**학습 스킴**입니다 — loss masking + modality dropout.
+- 단일 불량 acc: `0.983`
+- 중첩 불량 acc: `0.983`
+- KPI product: `0.967`
 
-## 데이터셋 (합성 stand-in)
+목표였던 `single >= 0.8`, `composite >= 0.6`, `single * composite >= 0.65`를 모두 넘었습니다.
 
-실데이터가 없으므로, 실제 문제 구조를 그대로 본뜬 합성 데이터로 파이프라인을 돌립니다.
-팀은 이 generator만 실데이터 loader로 교체하면 됩니다.
+다만 이 수치는 실데이터가 아니라 **실제 문제 구조를 흉내 낸 합성 데이터**에서 나온 결과입니다.
+따라서 이 리포트의 핵심은 "실제 KPI 달성 확정"이 아니라, **어떤 방식으로 평가하면 되는지**와
+**image만으로 안 풀리는 케이스를 tabular가 어떻게 살리는지**를 보여주는 것입니다.
+
+## 실험에서 확인한 패턴
+
+데이터는 `128x46` FBM image를 사용하고, intensity는 `0~8` grade로 표현했습니다.
 
 ![dataset](figures/01_dataset_overview.png)
 
-- `edge_ring`, `center_blob` — **이미지로 구분 가능**한 공간 클래스.
-- `leak_top`, `leak_bottom` — **이미지에서는 완전히 동일**(가운데 세로 stripe)하고 **전기
-  특성으로만 구분**되는 "정체성 클래스". synthetic 이미지로는 절대 가르칠 수 없는 케이스.
-- `real_single` / `real_composite`(희소) 는 tabular 보유, `synthetic_composite` 는 두 단일
-  불량 이미지를 `np.maximum`으로 합성 → **tabular 없음**(전기값은 합성 불가).
+패턴은 네 가지로 구성했습니다.
 
-## 학습 스킴
+- `edge_ring`: 가장자리 쪽이 강한 패턴
+- `center_blob`: 가운데 영역이 강한 패턴
+- `leak_top`, `leak_bottom`: FBM image에서는 거의 같은 세로 stripe로 보이는 패턴
 
-![training](figures/02_training_curves.png)
+특히 `leak_top`과 `leak_bottom`은 **이미지만 보면 구분하기 어렵게** 만들었습니다.
+두 클래스는 tabular 전기값에서 top/bottom 영역 차이가 나야 구분됩니다.
 
-- **Loss masking** — synthetic(이미지만) 샘플은 **image head만** 학습. real 샘플만
-  tabular/fusion head를 학습 (plan.md: "synthetic image는 image branch 학습에만 사용").
-- **Modality dropout** — 학습 중 real 샘플의 tabular 임베딩을 확률 0.3으로 학습된 null
-  벡터로 대체 → fusion이 (synthetic으로 풍부한) image 쪽으로 collapse하지 못하게 강제.
-- 세 head(image-only / tabular-only / fusion)를 동시에 출력.
+아래 그림은 단일 4종과 가능한 2-label 중첩 6종을 모두 보여줍니다.
+이번 보완에서 generator가 작은 데이터셋에서도 이 6개 중첩 조합을 빠뜨리지 않도록 수정했습니다.
 
-## 결과
+![pattern gallery](figures/06_pattern_gallery.png)
 
-### head × eval_group subset accuracy
+## 왜 fusion이 필요한가
 
-![head x group](figures/03_head_group_accuracy.png)
+image-only와 tabular-only는 각각 강점이 다릅니다.
 
-tabular/fusion head는 `synthetic_composite`에 막대가 없습니다 — 그 그룹엔 tabular가 없어
-평가에서 자동 제외되기 때문입니다(모달리티 비대칭이 평가에 그대로 반영됨).
+- image-only는 edge, center 같은 공간 패턴을 잘 봅니다.
+- tabular-only는 `leak_top`, `leak_bottom`처럼 이미지가 비슷한 클래스를 잘 나눕니다.
+- fusion은 둘의 장점을 같이 쓰기 때문에 중첩 불량에서 가장 안정적입니다.
 
-### KPI product (single × composite)
+## 성능 결과
 
 ![kpi](figures/04_kpi_product.png)
 
-| head | single acc | composite acc | **KPI product** |
-|---|---|---|---|
-| image_only | 0.70 | 0.65 | 0.45 |
-| tabular_only | 1.00 | 0.50 | 0.50 |
-| **fusion** | **1.00** | **0.88** | **0.88** |
+| head | single acc | composite acc | KPI product |
+|---|---:|---:|---:|
+| image_only | 0.678 | 0.517 | 0.350 |
+| tabular_only | 1.000 | 0.567 | 0.567 |
+| fusion | **0.983** | **0.983** | **0.967** |
 
-- **fusion KPI 0.88 ≫ best unimodal 0.50** (gain **+0.38**).
-- tabular는 single을 완벽히 맞추지만 composite에서 약하고, image는 정체성 클래스에서 약하다.
-  fusion이 둘을 결합해 양쪽을 모두 끌어올린다.
+해석은 단순합니다.
 
-### 정체성 클래스 & collapse 진단
+- image-only는 중첩에서 `0.517`로 낮습니다.
+- tabular-only는 단일은 매우 좋지만 중첩에서 `0.567`에 머뭅니다.
+- fusion은 단일과 중첩 모두 `0.983`으로 올라갑니다.
+- best unimodal KPI가 `0.567`인데 fusion KPI는 `0.967`입니다. 차이는 `+0.400`입니다.
+
+## image로만 안 되는 영역
 
 ![identity & collapse](figures/05_identity_and_collapse.png)
 
-- **정체성 슬라이스**: image 0.48 → tabular 0.86 → fusion 0.95. `tabular − image = +0.38`.
-  이미지로 못 가르는 클래스를 tabular가 살리고 fusion이 그걸 가져간다.
-- **collapse 진단(real composite)**: fusion이 image보다 +0.23 높고, tabular가 구한 케이스의
-  67%를 fusion이 따라감(follow-rate 0.67). **경고 없음** = collapse 아님.
-- **진짜 ablation**(모델에서 tabular를 null로 치환): subset acc 0.97 → 0.58,
-  **tabular 기여 +0.39**. fusion이 tabular를 실제로 쓰고 있음을 증명.
+`leak_top`, `leak_bottom`처럼 이미지가 비슷한 클래스만 따로 보면 다음과 같습니다.
 
-## 결론
+- image-only acc: `0.435`
+- tabular-only acc: `0.890`
+- fusion acc: `0.974`
+- tabular가 image보다 `+0.455` 높음
 
-1. **모달리티 비대칭에서도 fusion 학습이 된다** — 단, 순진한 concat이 아니라 loss masking으로
-   각 샘플을 valid한 head로만 흘리고, modality dropout으로 collapse를 막아야 한다.
-2. **가짜 tabular를 만들지 않는 것이 옳다** — 합성은 image branch만 키우고, tabular/fusion은
-   real로 학습하면 충분히 fusion 이득이 나온다.
-3. **정체성 클래스는 tabular가 필수** — 이미지 합성으로는 영원히 못 푸는 영역이며, 여기서
-   fusion의 가치가 가장 크다. 그래서 별도 슬라이스로 항상 추적한다.
+즉, 이 유형은 synthetic image를 많이 늘려도 근본적으로 해결하기 어렵습니다.
+전기값이 들어와야 분류가 됩니다.
 
-## 한계 / 실데이터 전 체크
+## fusion이 tabular를 실제로 쓰는지 확인
 
-- 인코더는 numpy MLP(단순화)다. 실전에선 torch CNN/transformer로 교체하되 3-head /
-  loss-masking 인터페이스는 그대로 둔다.
-- 데이터는 합성이라 신호가 깨끗하다. 실데이터에선 측정 노이즈·라벨 노이즈로 수치가 낮아진다.
-- split은 데모라 random이다. **실데이터에선 반드시 wafer/lot group split**으로 누수를 막을 것
-  (plan 리뷰 P0). composite support가 작으면 Wilson CI를 함께 본다.
+fusion이 겉으로만 좋아 보이고 실제로는 image만 따라가면 위험합니다.
+그래서 두 가지 확인을 했습니다.
+
+1. real composite에서 image-only는 틀렸지만 tabular-only는 맞춘 샘플을 찾았습니다.
+   이런 샘플 19개 중 fusion이 18개를 맞췄습니다. follow rate는 `0.947`입니다.
+2. 모델 입력에서 tabular를 지우는 ablation을 했습니다.
+   fusion acc가 `0.983`에서 `0.537`로 내려갔습니다. tabular 기여는 `+0.446`입니다.
+
+따라서 이번 실험에서는 fusion이 tabular를 무시하는 상태가 아닙니다.
+
+## 실무 적용 시 주의점
+
+- 이 결과는 합성 데이터 기반입니다. 실데이터에서는 noise, label 오류, lot/wafer 차이 때문에 수치가 낮아질 수 있습니다.
+- 실데이터 평가는 random split만 보지 말고 wafer/lot/time 기준 split도 봐야 합니다.
+- 실제 중첩 불량 support가 작으면 subset acc 하나만 보지 말고 confidence interval도 같이 봐야 합니다.
+- synthetic tabular는 만들지 않는 편이 안전합니다. 없는 전기값을 임의로 만들면 오히려 tabular 기준이 흔들릴 수 있습니다.
+- 팀 평가에서는 항상 세 가지를 같이 보세요: 전체 KPI, image로 비슷한 클래스 slice, fusion이 tabular를 실제로 쓰는지.
 
 ## 재현
 
@@ -94,5 +104,13 @@ PYTHONPATH=src python3 examples/run_fusion_experiment.py
 PYTHONPATH=src python3 -m pytest tests/test_fusion_model.py tests/test_fusion_eval.py -q
 ```
 
-산출물: `reports/figures/*.png`, `reports/fusion_predictions.csv`,
-`reports/fusion_report.{md,json}`, `reports/training_history.csv`.
+주요 산출물:
+
+- `reports/figures/01_dataset_overview.png`
+- `reports/figures/06_pattern_gallery.png`
+- `reports/figures/04_kpi_product.png`
+- `reports/figures/05_identity_and_collapse.png`
+- `reports/fusion_predictions.csv`
+- `reports/fusion_report.md`
+- `reports/fusion_report.json`
+- `reports/training_history.csv`

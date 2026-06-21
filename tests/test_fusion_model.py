@@ -1,7 +1,10 @@
+from itertools import combinations
+
 import numpy as np
 
 from fbm_multimodal.fusion.data import generate_dataset
 from fbm_multimodal.fusion.model import FusionMLP
+from fbm_multimodal.fusion.visualize import plot_pattern_gallery
 
 
 def _toy(seed: int = 0):
@@ -60,3 +63,41 @@ def test_generated_dataset_shapes_and_asymmetry():
     # real rows must HAVE tabular
     real = np.isin(ds.eval_group, np.array(["real_single", "real_composite"]))
     assert not np.isnan(ds.tabular[real]).any()
+
+
+def test_generated_composites_cover_all_label_pairs_even_when_small():
+    ds = generate_dataset(
+        seed=7,
+        n_real_single_train=12,
+        n_real_composite_train=6,
+        n_synth_composite_train=6,
+        n_real_single_test=12,
+        n_real_composite_test=6,
+        n_synth_composite_test=6,
+    )
+    expected_pairs = set(combinations(range(len(ds.label_names)), 2))
+
+    for split in ["train", "test"]:
+        for group in ["real_composite", "synthetic_composite"]:
+            mask = (ds.split == split) & (ds.eval_group == group)
+            seen = {
+                tuple(np.flatnonzero(row))
+                for row in ds.labels[mask]
+            }
+            assert seen == expected_pairs
+
+
+def test_pattern_gallery_visualization_is_written(tmp_path):
+    ds = generate_dataset(
+        seed=5,
+        n_real_single_train=16,
+        n_real_composite_train=6,
+        n_synth_composite_train=6,
+        n_real_single_test=8,
+        n_real_composite_test=6,
+        n_synth_composite_test=6,
+    )
+    out = plot_pattern_gallery(ds, tmp_path / "pattern_gallery.png")
+
+    assert out.exists()
+    assert out.stat().st_size > 0

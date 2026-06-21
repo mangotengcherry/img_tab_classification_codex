@@ -6,7 +6,12 @@ returns its path. ``generate_all_figures`` wires them together for the runner.
 
 from __future__ import annotations
 
+from itertools import combinations
+import os
 from pathlib import Path
+import tempfile
+
+os.environ.setdefault("MPLCONFIGDIR", str(Path(tempfile.gettempdir()) / "fbm-matplotlib"))
 
 import matplotlib
 
@@ -39,17 +44,15 @@ def plot_dataset_overview(dataset: FusionDataset, out: Path) -> Path:
         ("leak_top", [names.index("leak_top")]),
         ("leak_bottom", [names.index("leak_bottom")]),
     ]
-    fig, axes = plt.subplots(1, 5, figsize=(15, 4.2))
+    fig, axes = plt.subplots(1, 5, figsize=(16.5, 4.5))
     for ax, (title, want) in zip(axes[:4], panels):
         idx = _first_index(dataset, want, group="real_single")
         img = dataset.images[idx] if idx is not None else np.zeros((128, 46))
-        im = ax.imshow(img, cmap="inferno", vmin=0, vmax=8, aspect="auto")
-        flag = "  (identity)" if title in dataset.identity_labels else ""
-        ax.set_title(f"{title}{flag}", fontsize=10)
+        ax.imshow(img, cmap="inferno", vmin=0, vmax=8, aspect="auto")
+        flag = "\nimage same" if title in dataset.identity_labels else ""
+        ax.set_title(f"{title}{flag}", fontsize=9)
         ax.set_xticks([])
         ax.set_yticks([])
-    fig.colorbar(im, ax=axes[:4].tolist(), fraction=0.02, pad=0.02, label="FBM grade 0–8")
-
     ax = axes[4]
     groups, counts = np.unique(dataset.eval_group.astype(str), return_counts=True)
     order = ["real_single", "real_composite", "synthetic_composite"]
@@ -62,10 +65,48 @@ def plot_dataset_overview(dataset: FusionDataset, out: Path) -> Path:
         ax.text(b.get_x() + b.get_width() / 2, c, str(c), ha="center", va="bottom", fontsize=8)
 
     fig.suptitle(
-        "FBM dataset — leak_top and leak_bottom are IDENTICAL in the image (separable only electrically)",
+        "FBM dataset overview — same 0-8 color scale; leak_top and leak_bottom look the same in FBM",
         fontsize=11,
     )
-    return _save(fig, out)
+    fig.subplots_adjust(top=0.82, bottom=0.18, wspace=0.25)
+    return _save(fig, out, tight=False)
+
+
+def plot_pattern_gallery(dataset: FusionDataset, out: Path) -> Path:
+    """Show all single patterns and every 2-label synthetic composite pair."""
+    names = dataset.label_names
+    singles = [([i], f"single\n{names[i]}", "real_single") for i in range(len(names))]
+    pairs = [
+        (list(pair), f"synthetic pair\n{names[pair[0]]} + {names[pair[1]]}", "synthetic_composite")
+        for pair in combinations(range(len(names)), 2)
+    ]
+    panels = singles + pairs
+
+    fig, axes = plt.subplots(3, 4, figsize=(13.5, 9.2))
+    axes_flat = axes.ravel()
+    for ax, (want, title, group) in zip(axes_flat, panels):
+        idx = _first_index(dataset, want, group=group)
+        img = dataset.images[idx] if idx is not None else np.zeros((128, 46))
+        ax.imshow(img, cmap="inferno", vmin=0, vmax=8, aspect="auto")
+        ax.set_title(title, fontsize=9)
+        ax.set_xticks([])
+        ax.set_yticks([])
+
+    for ax in axes_flat[len(panels):]:
+        ax.axis("off")
+
+    fig.suptitle("Pattern coverage gallery — singles plus every two-defect synthetic overlap", fontsize=12)
+    fig.text(
+        0.5,
+        0.025,
+        "Same 0-8 color scale. The bottom row confirms identity-style overlaps still look alike in FBM.",
+        ha="center",
+        va="bottom",
+        fontsize=10,
+        color="#333333",
+    )
+    fig.subplots_adjust(top=0.88, bottom=0.08, wspace=0.22, hspace=0.42)
+    return _save(fig, out, tight=False)
 
 
 def plot_training_curves(history: dict[str, list[float]], out: Path) -> Path:
@@ -201,6 +242,7 @@ def generate_all_figures(
     out_dir.mkdir(parents=True, exist_ok=True)
     return [
         plot_dataset_overview(dataset, out_dir / "01_dataset_overview.png"),
+        plot_pattern_gallery(dataset, out_dir / "06_pattern_gallery.png"),
         plot_training_curves(history, out_dir / "02_training_curves.png"),
         plot_head_group_accuracy(report, out_dir / "03_head_group_accuracy.png"),
         plot_kpi(report, out_dir / "04_kpi_product.png"),
@@ -208,10 +250,11 @@ def generate_all_figures(
     ]
 
 
-def _save(fig, out: Path) -> Path:
+def _save(fig, out: Path, *, tight: bool = True) -> Path:
     out = Path(out)
     out.parent.mkdir(parents=True, exist_ok=True)
-    fig.tight_layout()
+    if tight:
+        fig.tight_layout()
     fig.savefig(out, dpi=120, bbox_inches="tight")
     plt.close(fig)
     return out

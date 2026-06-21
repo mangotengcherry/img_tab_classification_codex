@@ -7,7 +7,12 @@ from pathlib import Path
 import pandas as pd
 
 from fbm_multimodal.active_learning import rank_unlabeled_for_review
-from fbm_multimodal.condition_eval import TargetConfig, evaluate_conditions, summarize_condition_report
+from fbm_multimodal.condition_eval import (
+    TargetConfig,
+    evaluate_conditions,
+    evaluate_threshold_grid,
+    summarize_condition_report,
+)
 from fbm_multimodal.measurement import MeasurementMap
 
 
@@ -51,6 +56,11 @@ def _build_parser() -> argparse.ArgumentParser:
     evaluate.add_argument("--labels", required=True, help="Comma-separated label names.")
     evaluate.add_argument("--output", required=True, help="Output condition summary CSV path.")
     evaluate.add_argument("--threshold", type=float, default=0.5, help="Probability threshold for binary labels.")
+    evaluate.add_argument(
+        "--threshold-grid",
+        default="",
+        help="Optional comma-separated thresholds. When set, the best threshold per condition is selected.",
+    )
     evaluate.add_argument("--single-target", type=float, default=0.8, help="Target single-defect subset accuracy.")
     evaluate.add_argument("--composite-target", type=float, default=0.6, help="Target composite-defect subset accuracy.")
     evaluate.add_argument("--kpi-target", type=float, default=0.65, help="Target single*composite KPI product.")
@@ -98,12 +108,21 @@ def _evaluate_conditions(args: argparse.Namespace) -> int:
         composite_subset_accuracy=args.composite_target,
         kpi_product=args.kpi_target,
     )
-    summary = evaluate_conditions(
-        predictions,
-        labels=labels,
-        threshold=args.threshold,
-        targets=targets,
-    )
+    threshold_grid = _split_float_arg(args.threshold_grid)
+    if threshold_grid:
+        summary = evaluate_threshold_grid(
+            predictions,
+            labels=labels,
+            thresholds=threshold_grid,
+            targets=targets,
+        )
+    else:
+        summary = evaluate_conditions(
+            predictions,
+            labels=labels,
+            threshold=args.threshold,
+            targets=targets,
+        )
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     summary.to_csv(output_path, index=False)
@@ -115,6 +134,10 @@ def _split_csv_arg(value: str) -> list[str]:
     if not value:
         return []
     return [part.strip() for part in value.split(",") if part.strip()]
+
+
+def _split_float_arg(value: str) -> list[float]:
+    return [float(part) for part in _split_csv_arg(value)]
 
 
 if __name__ == "__main__":

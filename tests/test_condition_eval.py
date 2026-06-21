@@ -3,7 +3,7 @@ import json
 import pandas as pd
 
 from fbm_multimodal.cli import main
-from fbm_multimodal.condition_eval import evaluate_conditions
+from fbm_multimodal.condition_eval import evaluate_conditions, evaluate_threshold_grid
 
 
 def _condition_rows(condition, group, truths, probs):
@@ -130,3 +130,73 @@ def test_cli_evaluate_conditions_writes_summary_csv_and_json(tmp_path, capsys):
     assert exit_code == 0
     assert stdout["best_condition_by_kpi"] == "fusion"
     assert summary.loc[0, "meets_all_targets"]
+
+
+def test_evaluate_threshold_grid_selects_best_threshold_per_condition():
+    rows = []
+    rows += _condition_rows(
+        "threshold-sensitive",
+        "real_single",
+        truths=[(1, 0), (0, 1), (1, 0), (0, 1)],
+        probs=[(0.9, 0.1), (0.1, 0.9), (0.8, 0.2), (0.2, 0.8)],
+    )
+    rows += _condition_rows(
+        "threshold-sensitive",
+        "real_composite",
+        truths=[(1, 1), (1, 1), (1, 1), (1, 1)],
+        probs=[(0.8, 0.7), (0.7, 0.45), (0.6, 0.41), (0.9, 0.8)],
+    )
+
+    summary = evaluate_threshold_grid(
+        pd.DataFrame(rows),
+        labels=["a", "b"],
+        thresholds=[0.5, 0.4],
+    )
+
+    result = summary.iloc[0]
+    assert result["condition"] == "threshold-sensitive"
+    assert result["threshold"] == 0.4
+    assert result["single_subset_accuracy"] == 1.0
+    assert result["composite_subset_accuracy"] == 1.0
+    assert result["kpi_product"] == 1.0
+    assert result["meets_all_targets"]
+
+
+def test_cli_evaluate_conditions_can_sweep_threshold_grid(tmp_path, capsys):
+    predictions_path = tmp_path / "predictions.csv"
+    output_path = tmp_path / "summary.csv"
+    rows = []
+    rows += _condition_rows(
+        "threshold-sensitive",
+        "real_single",
+        truths=[(1, 0), (0, 1), (1, 0), (0, 1)],
+        probs=[(0.9, 0.1), (0.1, 0.9), (0.8, 0.2), (0.2, 0.8)],
+    )
+    rows += _condition_rows(
+        "threshold-sensitive",
+        "real_composite",
+        truths=[(1, 1), (1, 1), (1, 1), (1, 1)],
+        probs=[(0.8, 0.7), (0.7, 0.45), (0.6, 0.41), (0.9, 0.8)],
+    )
+    pd.DataFrame(rows).to_csv(predictions_path, index=False)
+
+    exit_code = main(
+        [
+            "evaluate-conditions",
+            "--predictions",
+            str(predictions_path),
+            "--labels",
+            "a,b",
+            "--output",
+            str(output_path),
+            "--threshold-grid",
+            "0.5,0.4",
+        ]
+    )
+
+    stdout = json.loads(capsys.readouterr().out)
+    summary = pd.read_csv(output_path)
+    assert exit_code == 0
+    assert stdout["best_condition_by_kpi"] == "threshold-sensitive"
+    assert summary.loc[0, "threshold"] == 0.4
+    assert summary.loc[0, "kpi_product"] == 1.0

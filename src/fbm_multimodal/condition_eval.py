@@ -53,6 +53,7 @@ def evaluate_conditions(
         summaries.append(
             {
                 "condition": condition,
+                "threshold": threshold,
                 "single_subset_accuracy": single_acc,
                 "composite_subset_accuracy": composite_acc,
                 "synthetic_composite_subset_accuracy": synthetic_acc,
@@ -82,16 +83,70 @@ def evaluate_conditions(
     return result.sort_values(["meets_all_targets", "kpi_product", "condition"], ascending=[False, False, True])
 
 
+def evaluate_threshold_grid(
+    predictions: pd.DataFrame,
+    *,
+    labels: list[str],
+    thresholds: list[float],
+    condition_column: str = "condition",
+    group_column: str = "eval_group",
+    single_group: str = "real_single",
+    composite_group: str = "real_composite",
+    synthetic_composite_group: str = "synthetic_composite",
+    targets: TargetConfig | None = None,
+) -> pd.DataFrame:
+    """Evaluate a threshold grid and keep the best threshold for each condition."""
+    if not thresholds:
+        raise ValueError("thresholds must not be empty")
+
+    summaries = []
+    for threshold in thresholds:
+        threshold_summary = evaluate_conditions(
+            predictions,
+            labels=labels,
+            threshold=threshold,
+            condition_column=condition_column,
+            group_column=group_column,
+            single_group=single_group,
+            composite_group=composite_group,
+            synthetic_composite_group=synthetic_composite_group,
+            targets=targets,
+        )
+        summaries.append(threshold_summary)
+
+    all_results = pd.concat(summaries, ignore_index=True)
+    ranked = all_results.sort_values(
+        [
+            "condition",
+            "meets_all_targets",
+            "kpi_product",
+            "single_subset_accuracy",
+            "composite_subset_accuracy",
+            "threshold",
+        ],
+        ascending=[True, False, False, False, False, True],
+    )
+    best_per_condition = ranked.drop_duplicates(subset=["condition"], keep="first")
+    return best_per_condition.sort_values(
+        ["meets_all_targets", "kpi_product", "condition"],
+        ascending=[False, False, True],
+    ).reset_index(drop=True)
+
+
 def summarize_condition_report(summary: pd.DataFrame, targets: TargetConfig | None = None) -> dict[str, object]:
     """Create a compact JSON-serializable report header for condition evaluation."""
     if targets is None:
         targets = TargetConfig()
     if summary.empty:
         best_condition = None
+        best_threshold = None
     else:
-        best_condition = str(summary.sort_values("kpi_product", ascending=False).iloc[0]["condition"])
+        best_row = summary.sort_values("kpi_product", ascending=False).iloc[0]
+        best_condition = str(best_row["condition"])
+        best_threshold = float(best_row["threshold"]) if "threshold" in best_row.index else None
     return {
         "best_condition_by_kpi": best_condition,
+        "best_threshold_by_kpi": best_threshold,
         "single_target": targets.single_subset_accuracy,
         "composite_target": targets.composite_subset_accuracy,
         "kpi_target": targets.kpi_product,

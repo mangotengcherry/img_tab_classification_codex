@@ -64,6 +64,19 @@ PYTHONPATH=src python3 -m fbm_multimodal.cli evaluate-conditions \
   --kpi-target 0.65
 ```
 
+Sweep scalar thresholds and keep the best threshold per condition:
+
+```bash
+PYTHONPATH=src python3 -m fbm_multimodal.cli evaluate-conditions \
+  --predictions outputs/condition_predictions.csv \
+  --labels defect_a,defect_b,defect_c \
+  --output outputs/condition_summary.csv \
+  --threshold-grid 0.30,0.35,0.40,0.45,0.50,0.55,0.60 \
+  --single-target 0.8 \
+  --composite-target 0.6 \
+  --kpi-target 0.65
+```
+
 Expected prediction columns:
 
 - `condition`: experiment condition name, such as `image_only_synth`, `late_fusion`, or `mapped_fusion`
@@ -79,6 +92,7 @@ The evaluator reports:
 - synthetic composite subset accuracy
 - synthetic-to-real composite gap
 - `single_subset_accuracy * composite_subset_accuracy`
+- selected `threshold`
 - pass/fail flags for single, composite, KPI, and all targets
 - required composite accuracy at the observed single accuracy to reach the KPI target
 

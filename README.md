@@ -186,6 +186,49 @@ evaluator가 리포트하는 항목은 다음과 같습니다.
 
 product KPI `0.65`를 만족하려면, single subset accuracy가 `0.8`인 condition은 composite subset accuracy가 최소 `0.8125` 이상이어야 합니다.
 
+## 멀티모달 Fusion 실험 (image + tabular)
+
+> "이미지는 합성·증강이 가능하지만 tabular(전기 MSR)는 합성 불가인데, 둘을 fusion해 학습이 되는가?"
+> 에 답하는, 바로 실행 가능한 end-to-end 실험입니다. 전체 리포트:
+> **[reports/fusion_experiment_report.md](reports/fusion_experiment_report.md)** ·
+> 설계 배경: [docs/multimodal_fusion_guide.md](docs/multimodal_fusion_guide.md) ·
+> 평가기 사용법: [docs/fusion_eval_quickstart.md](docs/fusion_eval_quickstart.md)
+
+핵심은 모델 크기가 아니라 **학습 스킴**입니다.
+
+- **Loss masking** — synthetic(이미지만) 샘플은 image head만, real 샘플만 tabular/fusion head를 학습.
+- **Modality dropout** — fusion이 (synthetic으로 풍부한) image 쪽으로 collapse하지 못하게 강제.
+- 세 head(image-only / tabular-only / fusion)를 동시에 평가하고 collapse·정체성 슬라이스를 진단.
+
+### 실행
+
+```bash
+PYTHONPATH=src python3 examples/run_fusion_experiment.py      # 학습→평가→시각화 (numpy만, ~1초)
+PYTHONPATH=src python3 -m fbm_multimodal.fusion \             # 예측 CSV만으로 진단 리포트
+  --predictions reports/fusion_predictions.csv \
+  --labels edge_ring,center_blob,leak_top,leak_bottom \
+  --identity-labels leak_top,leak_bottom
+```
+
+실데이터로 바꾸려면 `examples/run_fusion_experiment.py`의 `generate_dataset()` 한 줄만 본인
+loader로 교체하면 됩니다(컬럼 형식은 quickstart 참고). 같은 예측 CSV를 위 `evaluate-conditions`에도 넣을 수 있습니다.
+
+### 결과 한눈에
+
+| head | single acc | composite acc | **KPI product** |
+|---|---|---|---|
+| image_only | 0.70 | 0.65 | 0.45 |
+| tabular_only | 1.00 | 0.50 | 0.50 |
+| **fusion** | **1.00** | **0.88** | **0.88** |
+
+fusion KPI **0.88** ≫ best unimodal **0.50** (gain **+0.38**). 정체성 클래스(이미지로 동일)에서
+tabular가 image를 **+0.38** 앞서고, 진짜 ablation에서 tabular 기여 **+0.39** → fusion이 tabular를
+실제로 사용(collapse 아님).
+
+![dataset](reports/figures/01_dataset_overview.png)
+![kpi](reports/figures/04_kpi_product.png)
+![identity & collapse](reports/figures/05_identity_and_collapse.png)
+
 ## Measurement Map
 
 `measurement_map.csv`는 다음 column을 포함하는 형태를 권장합니다.

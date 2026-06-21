@@ -1,0 +1,169 @@
+{
+  "labels": [
+    "edge_ring",
+    "center_blob",
+    "leak_top",
+    "leak_bottom"
+  ],
+  "thresholds": {
+    "edge_ring": 0.5,
+    "center_blob": 0.5,
+    "leak_top": 0.5,
+    "leak_bottom": 0.5
+  },
+  "heads_present": [
+    "image_only",
+    "tabular_only",
+    "fusion"
+  ],
+  "head_group_accuracy": {
+    "image_only": {
+      "real_single": {
+        "accuracy": 0.7,
+        "support": 180.0,
+        "correct": 126.0,
+        "ci_low": 0.6294454640382406,
+        "ci_high": 0.7621960360357359
+      },
+      "real_composite": {
+        "accuracy": 0.65,
+        "support": 60.0,
+        "correct": 39.0,
+        "ci_low": 0.5236238380947751,
+        "ci_high": 0.7583239827618451
+      },
+      "synthetic_composite": {
+        "accuracy": 0.66,
+        "support": 150.0,
+        "correct": 99.0,
+        "ci_low": 0.5810413820559243,
+        "ci_high": 0.7309678534174459
+      }
+    },
+    "tabular_only": {
+      "real_single": {
+        "accuracy": 1.0,
+        "support": 180.0,
+        "correct": 180.0,
+        "ci_low": 0.9791037501849418,
+        "ci_high": 1.0
+      },
+      "real_composite": {
+        "accuracy": 0.5,
+        "support": 60.0,
+        "correct": 30.0,
+        "ci_low": 0.37734812427246284,
+        "ci_high": 0.6226518757275372
+      },
+      "synthetic_composite": {
+        "accuracy": NaN,
+        "support": 0.0,
+        "correct": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 1.0
+      }
+    },
+    "fusion": {
+      "real_single": {
+        "accuracy": 1.0,
+        "support": 180.0,
+        "correct": 180.0,
+        "ci_low": 0.9791037501849418,
+        "ci_high": 1.0
+      },
+      "real_composite": {
+        "accuracy": 0.8833333333333333,
+        "support": 60.0,
+        "correct": 53.0,
+        "ci_low": 0.7782097940014187,
+        "ci_high": 0.9423235259654995
+      },
+      "synthetic_composite": {
+        "accuracy": NaN,
+        "support": 0.0,
+        "correct": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 1.0
+      }
+    }
+  },
+  "kpi_by_head": {
+    "image_only": {
+      "single_acc": 0.7,
+      "composite_acc": 0.65,
+      "kpi_product": 0.45499999999999996,
+      "single_support": 180.0,
+      "composite_support": 60.0,
+      "composite_ci_low": 0.5236238380947751,
+      "composite_ci_high": 0.7583239827618451
+    },
+    "tabular_only": {
+      "single_acc": 1.0,
+      "composite_acc": 0.5,
+      "kpi_product": 0.5,
+      "single_support": 180.0,
+      "composite_support": 60.0,
+      "composite_ci_low": 0.37734812427246284,
+      "composite_ci_high": 0.6226518757275372
+    },
+    "fusion": {
+      "single_acc": 1.0,
+      "composite_acc": 0.8833333333333333,
+      "kpi_product": 0.8833333333333333,
+      "single_support": 180.0,
+      "composite_support": 60.0,
+      "composite_ci_low": 0.7782097940014187,
+      "composite_ci_high": 0.9423235259654995
+    }
+  },
+  "fusion_gain": {
+    "fusion_kpi": 0.8833333333333333,
+    "best_unimodal_kpi": 0.5,
+    "gain": 0.3833333333333333,
+    "gain_over_image_only": 0.42833333333333334,
+    "gain_over_tabular_only": 0.3833333333333333
+  },
+  "collapse_diagnostic": {
+    "available": 1.0,
+    "n_composite": 60.0,
+    "image_only_subset_acc": 0.65,
+    "fusion_subset_acc": 0.8833333333333333,
+    "fusion_gain_over_image": 0.23333333333333328,
+    "tabular_rescue_candidates": 6.0,
+    "fusion_followed_tabular": 4.0,
+    "fusion_follow_rate": 0.6666666666666666,
+    "fusion_regressions": 0.0
+  },
+  "identity_slice": {
+    "identity_labels": [
+      "leak_top",
+      "leak_bottom"
+    ],
+    "n": 143.0,
+    "by_head": {
+      "image_only": {
+        "accuracy": 0.4755244755244755,
+        "support": 143.0,
+        "correct": 68.0,
+        "ci_low": 0.3953865848421657,
+        "ci_high": 0.5569430002345428
+      },
+      "tabular_only": {
+        "accuracy": 0.8601398601398601,
+        "support": 143.0,
+        "correct": 123.0,
+        "ci_low": 0.7938323518793072,
+        "ci_high": 0.9076037534205533
+      },
+      "fusion": {
+        "accuracy": 0.951048951048951,
+        "support": 143.0,
+        "correct": 136.0,
+        "ci_low": 0.9024087816159931,
+        "ci_high": 0.9760888648275214
+      }
+    },
+    "tabular_minus_image": 0.3846153846153846
+  },
+  "warnings": []
+}

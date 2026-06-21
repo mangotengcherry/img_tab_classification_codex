@@ -79,6 +79,16 @@ def _build_parser() -> argparse.ArgumentParser:
     evaluate.add_argument("--single-target", type=float, default=0.8, help="Target single-defect subset accuracy.")
     evaluate.add_argument("--composite-target", type=float, default=0.6, help="Target composite-defect subset accuracy.")
     evaluate.add_argument("--kpi-target", type=float, default=0.65, help="Target single*composite KPI product.")
+    evaluate.add_argument(
+        "--fail-on-miss",
+        action="store_true",
+        help="Return exit code 2 when no evaluated condition meets all targets.",
+    )
+    evaluate.add_argument(
+        "--require-all-runs",
+        action="store_true",
+        help="With --fail-on-miss and --run-column, require a condition to pass every run.",
+    )
     return parser
 
 
@@ -125,6 +135,8 @@ def _evaluate_conditions(args: argparse.Namespace) -> int:
     )
     threshold_grid = _split_float_arg(args.threshold_grid)
     run_column = args.run_column or None
+    if args.require_all_runs and not run_column:
+        raise ValueError("--require-all-runs requires --run-column")
     if threshold_grid:
         summary = evaluate_threshold_grid(
             predictions,
@@ -145,10 +157,11 @@ def _evaluate_conditions(args: argparse.Namespace) -> int:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     summary.to_csv(output_path, index=False)
     aggregate = None
-    if args.aggregate_output:
+    if args.aggregate_output or args.require_all_runs:
         if not run_column:
             raise ValueError("--aggregate-output requires --run-column")
         aggregate = aggregate_condition_runs(summary, run_column=run_column)
+    if args.aggregate_output:
         aggregate_path = Path(args.aggregate_output)
         aggregate_path.parent.mkdir(parents=True, exist_ok=True)
         aggregate.to_csv(aggregate_path, index=False)
@@ -157,6 +170,12 @@ def _evaluate_conditions(args: argparse.Namespace) -> int:
         report_path.parent.mkdir(parents=True, exist_ok=True)
         report_path.write_text(render_condition_report(summary, aggregate=aggregate, targets=targets))
     print(json.dumps(summarize_condition_report(summary, targets), ensure_ascii=False, indent=2))
+    if args.fail_on_miss and not _condition_gate_passed(
+        summary,
+        aggregate=aggregate,
+        require_all_runs=args.require_all_runs,
+    ):
+        return 2
     return 0
 
 
@@ -178,6 +197,23 @@ def _split_csv_arg(value: str) -> list[str]:
 
 def _split_float_arg(value: str) -> list[float]:
     return [float(part) for part in _split_csv_arg(value)]
+
+
+def _condition_gate_passed(
+    summary: pd.DataFrame,
+    *,
+    aggregate: pd.DataFrame | None,
+    require_all_runs: bool,
+) -> bool:
+    if require_all_runs:
+        if aggregate is None:
+            raise ValueError("--require-all-runs requires --run-column")
+        if aggregate.empty:
+            return False
+        return bool(aggregate["all_runs_meet_targets"].astype(bool).any())
+    if summary.empty:
+        return False
+    return bool(summary["meets_all_targets"].astype(bool).any())
 
 
 if __name__ == "__main__":

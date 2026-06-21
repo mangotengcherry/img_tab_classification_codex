@@ -109,6 +109,38 @@ PYTHONPATH=src python3 -m fbm_multimodal.cli evaluate-conditions \
 The aggregate report includes mean, standard deviation, min, max, and whether all runs meet the targets.
 The Markdown report states PASS/FAIL, the recommended condition, the selected threshold, and the remaining KPI gap when no condition passes.
 
+For CI or service-readiness gates, add `--fail-on-miss`. The evaluator still writes the CSV/Markdown artifacts, but exits with code `2` when no condition meets the single, composite, and KPI targets:
+
+```bash
+PYTHONPATH=src python3 -m fbm_multimodal.cli evaluate-conditions \
+  --prediction-glob "outputs/conditions/*.csv" \
+  --labels defect_a,defect_b,defect_c \
+  --output outputs/condition_summary.csv \
+  --report-output outputs/condition_report.md \
+  --threshold-grid 0.30,0.35,0.40,0.45,0.50,0.55,0.60 \
+  --single-target 0.8 \
+  --composite-target 0.6 \
+  --kpi-target 0.65 \
+  --fail-on-miss
+```
+
+When using repeated seeds, add `--require-all-runs` to make the gate pass only if at least one condition meets all targets on every run:
+
+```bash
+PYTHONPATH=src python3 -m fbm_multimodal.cli evaluate-conditions \
+  --prediction-glob "outputs/conditions/*.csv" \
+  --labels defect_a,defect_b,defect_c \
+  --output outputs/condition_by_seed.csv \
+  --aggregate-output outputs/condition_aggregate.csv \
+  --run-column seed \
+  --threshold-grid 0.30,0.35,0.40,0.45,0.50,0.55,0.60 \
+  --single-target 0.8 \
+  --composite-target 0.6 \
+  --kpi-target 0.65 \
+  --fail-on-miss \
+  --require-all-runs
+```
+
 Expected prediction columns:
 
 - `condition`: experiment condition name, such as `image_only_synth`, `late_fusion`, or `mapped_fusion`

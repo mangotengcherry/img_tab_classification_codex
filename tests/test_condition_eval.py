@@ -515,3 +515,131 @@ def test_cli_evaluate_conditions_accepts_binary_prediction_columns(tmp_path):
     assert exit_code == 0
     assert summary.loc[0, "condition"] == "binary"
     assert summary.loc[0, "kpi_product"] == 1.0
+
+
+def test_cli_fail_on_miss_returns_nonzero_when_no_condition_meets_targets(tmp_path):
+    predictions_path = tmp_path / "predictions.csv"
+    summary_path = tmp_path / "summary.csv"
+    rows = []
+    rows += _condition_rows(
+        "minima-only",
+        "real_single",
+        truths=[(1, 0), (1, 0), (0, 1), (0, 1), (1, 0)],
+        probs=[(0.9, 0.1), (0.8, 0.2), (0.2, 0.7), (0.3, 0.8), (0.4, 0.7)],
+    )
+    rows += _condition_rows(
+        "minima-only",
+        "real_composite",
+        truths=[(1, 1), (1, 1), (1, 1), (1, 1), (1, 1)],
+        probs=[(0.8, 0.7), (0.7, 0.6), (0.9, 0.8), (0.8, 0.4), (0.4, 0.9)],
+    )
+    pd.DataFrame(rows).to_csv(predictions_path, index=False)
+
+    exit_code = main(
+        [
+            "evaluate-conditions",
+            "--predictions",
+            str(predictions_path),
+            "--labels",
+            "a,b",
+            "--output",
+            str(summary_path),
+            "--fail-on-miss",
+        ]
+    )
+
+    summary = pd.read_csv(summary_path)
+    assert exit_code == 2
+    assert summary.loc[0, "single_subset_accuracy"] == 0.8
+    assert summary.loc[0, "composite_subset_accuracy"] == 0.6
+    assert summary.loc[0, "kpi_product"] == 0.48
+    assert not summary.loc[0, "meets_all_targets"]
+
+
+def test_cli_fail_on_miss_returns_zero_when_a_condition_meets_targets(tmp_path):
+    predictions_path = tmp_path / "predictions.csv"
+    summary_path = tmp_path / "summary.csv"
+    rows = []
+    rows += _condition_rows(
+        "fusion",
+        "real_single",
+        truths=[(1, 0), (0, 1), (1, 0), (0, 1)],
+        probs=[(0.9, 0.1), (0.1, 0.9), (0.8, 0.2), (0.2, 0.8)],
+    )
+    rows += _condition_rows(
+        "fusion",
+        "real_composite",
+        truths=[(1, 1), (1, 1), (1, 1), (1, 1)],
+        probs=[(0.8, 0.7), (0.7, 0.6), (0.9, 0.8), (0.8, 0.7)],
+    )
+    pd.DataFrame(rows).to_csv(predictions_path, index=False)
+
+    exit_code = main(
+        [
+            "evaluate-conditions",
+            "--predictions",
+            str(predictions_path),
+            "--labels",
+            "a,b",
+            "--output",
+            str(summary_path),
+            "--fail-on-miss",
+        ]
+    )
+
+    summary = pd.read_csv(summary_path)
+    assert exit_code == 0
+    assert summary.loc[0, "condition"] == "fusion"
+    assert summary.loc[0, "meets_all_targets"]
+
+
+def test_cli_require_all_runs_fail_on_miss_uses_aggregate_gate(tmp_path):
+    predictions_path = tmp_path / "predictions.csv"
+    summary_path = tmp_path / "summary.csv"
+    aggregate_path = tmp_path / "aggregate.csv"
+    rows = []
+    for seed in [1, 2]:
+        single = pd.DataFrame(
+            _condition_rows(
+                "fusion",
+                "real_single",
+                truths=[(1, 0), (0, 1)],
+                probs=[(0.9, 0.1), (0.1, 0.9)],
+            )
+        )
+        composite = pd.DataFrame(
+            _condition_rows(
+                "fusion",
+                "real_composite",
+                truths=[(1, 1), (1, 1)],
+                probs=[(0.8, 0.7), (0.9, 0.8 if seed == 1 else 0.4)],
+            )
+        )
+        frame = pd.concat([single, composite], ignore_index=True)
+        frame["seed"] = seed
+        rows.append(frame)
+    pd.concat(rows, ignore_index=True).to_csv(predictions_path, index=False)
+
+    exit_code = main(
+        [
+            "evaluate-conditions",
+            "--predictions",
+            str(predictions_path),
+            "--labels",
+            "a,b",
+            "--output",
+            str(summary_path),
+            "--run-column",
+            "seed",
+            "--aggregate-output",
+            str(aggregate_path),
+            "--fail-on-miss",
+            "--require-all-runs",
+        ]
+    )
+
+    summary = pd.read_csv(summary_path)
+    aggregate = pd.read_csv(aggregate_path)
+    assert exit_code == 2
+    assert summary["meets_all_targets"].tolist() == [True, False]
+    assert not aggregate.loc[0, "all_runs_meet_targets"]

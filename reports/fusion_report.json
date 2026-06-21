@@ -19,25 +19,25 @@
   "head_group_accuracy": {
     "image_only": {
       "real_single": {
-        "accuracy": 0.6777777777777778,
+        "accuracy": 0.7222222222222222,
         "support": 180.0,
-        "correct": 122.0,
-        "ci_low": 0.6064061215775904,
-        "ci_high": 0.7417196562659445
+        "correct": 130.0,
+        "ci_low": 0.652665499946382,
+        "ci_high": 0.7824917223580367
       },
       "real_composite": {
-        "accuracy": 0.5166666666666667,
+        "accuracy": 0.5833333333333334,
         "support": 60.0,
-        "correct": 31.0,
-        "ci_low": 0.39307594850843575,
-        "ci_high": 0.6382515871422999
+        "correct": 35.0,
+        "ci_low": 0.45727854313239624,
+        "ci_high": 0.6993591351212818
       },
       "synthetic_composite": {
-        "accuracy": 0.56,
+        "accuracy": 0.58,
         "support": 150.0,
-        "correct": 84.0,
-        "ci_low": 0.48004707281221837,
-        "ci_high": 0.6369563904902955
+        "correct": 87.0,
+        "ci_low": 0.49998333511352705,
+        "ci_high": 0.656021282623158
       }
     },
     "tabular_only": {
@@ -49,11 +49,11 @@
         "ci_high": 1.0
       },
       "real_composite": {
-        "accuracy": 0.5666666666666667,
+        "accuracy": 0.55,
         "support": 60.0,
-        "correct": 34.0,
-        "ci_low": 0.44103214654694856,
-        "ci_high": 0.6842779960559936
+        "correct": 33.0,
+        "ci_low": 0.42491714548981496,
+        "ci_high": 0.6690654614623918
       },
       "synthetic_composite": {
         "accuracy": NaN,
@@ -65,18 +65,18 @@
     },
     "fusion": {
       "real_single": {
-        "accuracy": 0.9833333333333333,
+        "accuracy": 0.9888888888888889,
         "support": 180.0,
-        "correct": 177.0,
-        "ci_low": 0.9521509421982017,
-        "ci_high": 0.9943160163139086
+        "correct": 178.0,
+        "ci_low": 0.9603981999780283,
+        "ci_high": 0.9969476890916927
       },
       "real_composite": {
-        "accuracy": 0.9833333333333333,
+        "accuracy": 0.9666666666666667,
         "support": 60.0,
-        "correct": 59.0,
-        "ci_low": 0.9114466177322051,
-        "ci_high": 0.9970519161391262
+        "correct": 58.0,
+        "ci_low": 0.8863601247107462,
+        "ci_high": 0.9908108735098498
       },
       "synthetic_composite": {
         "accuracy": NaN,
@@ -89,49 +89,49 @@
   },
   "kpi_by_head": {
     "image_only": {
-      "single_acc": 0.6777777777777778,
-      "composite_acc": 0.5166666666666667,
-      "kpi_product": 0.3501851851851852,
+      "single_acc": 0.7222222222222222,
+      "composite_acc": 0.5833333333333334,
+      "kpi_product": 0.42129629629629634,
       "single_support": 180.0,
       "composite_support": 60.0,
-      "composite_ci_low": 0.39307594850843575,
-      "composite_ci_high": 0.6382515871422999
+      "composite_ci_low": 0.45727854313239624,
+      "composite_ci_high": 0.6993591351212818
     },
     "tabular_only": {
       "single_acc": 1.0,
-      "composite_acc": 0.5666666666666667,
-      "kpi_product": 0.5666666666666667,
+      "composite_acc": 0.55,
+      "kpi_product": 0.55,
       "single_support": 180.0,
       "composite_support": 60.0,
-      "composite_ci_low": 0.44103214654694856,
-      "composite_ci_high": 0.6842779960559936
+      "composite_ci_low": 0.42491714548981496,
+      "composite_ci_high": 0.6690654614623918
     },
     "fusion": {
-      "single_acc": 0.9833333333333333,
-      "composite_acc": 0.9833333333333333,
-      "kpi_product": 0.9669444444444444,
+      "single_acc": 0.9888888888888889,
+      "composite_acc": 0.9666666666666667,
+      "kpi_product": 0.955925925925926,
       "single_support": 180.0,
       "composite_support": 60.0,
-      "composite_ci_low": 0.9114466177322051,
-      "composite_ci_high": 0.9970519161391262
+      "composite_ci_low": 0.8863601247107462,
+      "composite_ci_high": 0.9908108735098498
     }
   },
   "fusion_gain": {
-    "fusion_kpi": 0.9669444444444444,
-    "best_unimodal_kpi": 0.5666666666666667,
-    "gain": 0.40027777777777773,
-    "gain_over_image_only": 0.6167592592592592,
-    "gain_over_tabular_only": 0.40027777777777773
+    "fusion_kpi": 0.955925925925926,
+    "best_unimodal_kpi": 0.55,
+    "gain": 0.4059259259259259,
+    "gain_over_image_only": 0.5346296296296296,
+    "gain_over_tabular_only": 0.4059259259259259
   },
   "collapse_diagnostic": {
     "available": 1.0,
     "n_composite": 60.0,
-    "image_only_subset_acc": 0.5166666666666667,
-    "fusion_subset_acc": 0.9833333333333333,
-    "fusion_gain_over_image": 0.46666666666666656,
-    "tabular_rescue_candidates": 19.0,
-    "fusion_followed_tabular": 18.0,
-    "fusion_follow_rate": 0.9473684210526315,
+    "image_only_subset_acc": 0.5833333333333334,
+    "fusion_subset_acc": 0.9666666666666667,
+    "fusion_gain_over_image": 0.3833333333333333,
+    "tabular_rescue_candidates": 17.0,
+    "fusion_followed_tabular": 15.0,
+    "fusion_follow_rate": 0.8823529411764706,
     "fusion_regressions": 0.0
   },
   "identity_slice": {
@@ -139,31 +139,31 @@
       "leak_top",
       "leak_bottom"
     ],
-    "n": 154.0,
+    "n": 141.0,
     "by_head": {
       "image_only": {
-        "accuracy": 0.43506493506493504,
-        "support": 154.0,
-        "correct": 67.0,
-        "ci_low": 0.3592860888184815,
-        "ci_high": 0.5140046026088733
+        "accuracy": 0.46808510638297873,
+        "support": 141.0,
+        "correct": 66.0,
+        "ci_low": 0.38766415979626306,
+        "ci_high": 0.5501989955403254
       },
       "tabular_only": {
-        "accuracy": 0.8896103896103896,
-        "support": 154.0,
-        "correct": 137.0,
-        "ci_low": 0.8303280093773988,
-        "ci_high": 0.9299278420584711
+        "accuracy": 0.8794326241134752,
+        "support": 141.0,
+        "correct": 124.0,
+        "ci_low": 0.8153920951986041,
+        "ci_high": 0.9233459469108453
       },
       "fusion": {
-        "accuracy": 0.974025974025974,
-        "support": 154.0,
-        "correct": 150.0,
-        "ci_low": 0.9351239123333996,
-        "ci_high": 0.9898540402469087
+        "accuracy": 0.9716312056737588,
+        "support": 141.0,
+        "correct": 137.0,
+        "ci_low": 0.9293304990335695,
+        "ci_high": 0.9889139832146244
       }
     },
-    "tabular_minus_image": 0.4545454545454546
+    "tabular_minus_image": 0.4113475177304965
   },
   "warnings": []
 }

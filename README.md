@@ -192,13 +192,16 @@ product KPI `0.65`를 만족하려면, single subset accuracy가 `0.8`인 condit
 > 에 답하는, 바로 실행 가능한 end-to-end 실험입니다. 전체 리포트:
 > **[reports/fusion_experiment_report.md](reports/fusion_experiment_report.md)** ·
 > 설계 배경: [docs/multimodal_fusion_guide.md](docs/multimodal_fusion_guide.md) ·
-> 평가기 사용법: [docs/fusion_eval_quickstart.md](docs/fusion_eval_quickstart.md)
+> 평가기 사용법: [docs/fusion_eval_quickstart.md](docs/fusion_eval_quickstart.md) ·
+> FBM 패턴 노트: [docs/fbm_domain_notes.md](docs/fbm_domain_notes.md)
 
 핵심은 모델 크기가 아니라 **학습 스킴**입니다.
 
 - **Loss masking** — synthetic(이미지만) 샘플은 image head만, real 샘플만 tabular/fusion head를 학습.
 - **Modality dropout** — fusion이 (synthetic으로 풍부한) image 쪽으로 collapse하지 못하게 강제.
 - 세 head(image-only / tabular-only / fusion)를 동시에 평가하고 collapse·정체성 슬라이스를 진단.
+- **도메인 패턴 진단** — FBM 논문에서 쓰인 관점처럼 grade 3 이상만 남긴 이진화 화면과
+  랜덤/세로선/가로선/block stress pattern을 함께 확인.
 
 ### 실행
 
@@ -232,8 +235,14 @@ tabular가 image를 **+0.455** 앞서고, 진짜 ablation에서 tabular 기여 *
 
 ![dataset](reports/figures/01_dataset_overview.png)
 ![pattern gallery](reports/figures/06_pattern_gallery.png)
+![binarized pattern gallery](reports/figures/07_binarized_pattern_gallery.png)
+![paper pattern stress gallery](reports/figures/08_paper_pattern_stress_gallery.png)
 ![kpi](reports/figures/04_kpi_product.png)
 ![identity & collapse](reports/figures/05_identity_and_collapse.png)
+
+참고 논문에서 말하는 `single-bit / non-single-bit`는 여기서의 `단일 label / 중첩 label`과
+완전히 같은 뜻은 아닙니다. 이 repo에서는 논문 아이디어를 모델 교체보다 **고강도 grade 패턴을
+쉽게 확인하는 진단 시각화**로 먼저 반영했습니다.
 
 ## Measurement Map
 

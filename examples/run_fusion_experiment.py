@@ -25,6 +25,7 @@ import numpy as np
 import pandas as pd
 
 from fbm_multimodal.fusion.data import generate_dataset
+from fbm_multimodal.fusion.fbm_patterns import image_feature_matrix
 from fbm_multimodal.fusion.fusion_eval import evaluate_fusion, modality_contribution
 from fbm_multimodal.fusion.model import FusionMLP
 from fbm_multimodal.fusion.visualize import generate_all_figures
@@ -34,16 +35,13 @@ REPORTS = Path("reports")
 FIGURES = REPORTS / "figures"
 
 
-def _avg_pool2x2(images: np.ndarray) -> np.ndarray:
-    """2x2 average pool (downsample) — keeps spatial signal, speeds up the dense encoder."""
-    n, h, w = images.shape
-    h2, w2 = h // 2, w // 2
-    return images[:, : h2 * 2, : w2 * 2].reshape(n, h2, 2, w2, 2).mean(axis=(2, 4))
-
-
 def _features(images: np.ndarray) -> np.ndarray:
-    # normalize grade 0..8 -> 0..1, downsample, flatten
-    return (_avg_pool2x2(images) / 8.0).reshape(images.shape[0], -1)
+    """Paper-grounded image features (Kim et al. 2015, RSVD).
+
+    Concatenates the normalized graded FBM, the binarized (grade>=3) structure
+    channel, and the first-16 eigen-image norms of the binarized map.
+    """
+    return image_feature_matrix(images, pool=2, k_eigen=16)
 
 
 def main() -> None:
@@ -62,7 +60,7 @@ def main() -> None:
     has_tab = ds.has_tabular
 
     # 2) train --------------------------------------------------------------
-    model = FusionMLP(hidden=32, lr=3e-3, epochs=200, dropout_p=0.3, seed=SEED)
+    model = FusionMLP(hidden=48, lr=3e-3, epochs=300, dropout_p=0.3, seed=SEED)
     model.fit(xi[train], xt[train], y[train], has_tab[train])
     pd.DataFrame(model.history).to_csv(REPORTS / "training_history.csv", index=False)
 

@@ -26,6 +26,15 @@ from itertools import combinations
 
 import numpy as np
 
+from fbm_multimodal.fusion.fbm_patterns import (
+    BINARIZE_THRESHOLD,
+    binarize_fbm,
+    paint_cluster,
+    paint_edge_ring,
+    paint_single_bit_scatter,
+    paint_vertical_line,
+)
+
 
 IMAGE_SHAPE = (128, 46)
 LABELS = ["edge_ring", "center_blob", "leak_top", "leak_bottom"]
@@ -59,24 +68,33 @@ class FusionDataset:
         return self.images.reshape(self.images.shape[0], -1)
 
 
+def binarize_fbm_grades(image: np.ndarray, threshold: float = BINARIZE_THRESHOLD) -> np.ndarray:
+    """Return 1 where FBM grade is high enough to be treated as a pattern signal."""
+    return binarize_fbm(image, threshold=threshold).astype(int)
+
+
 def _image_for(active: list[int], rng: np.random.Generator) -> np.ndarray:
+    """Render an FBM grade image using literature-grounded failure patterns.
+
+    Structured non-single-bit patterns (edge ring, cluster, vertical line) are
+    HIGH grade (>=3, survive binarization); a random LOW-grade single-bit scatter
+    is always added as background (paper: single-bit = random, low grade). See
+    fbm_patterns.py / docs/fbm_domain_notes.md.
+    """
     h, w = IMAGE_SHAPE
-    img = rng.uniform(0.0, 0.4, size=(h, w))  # faint background noise
+    img = rng.uniform(0.0, 0.4, size=(h, w))   # faint analog background
+    paint_single_bit_scatter(img, rng)          # random low-grade single-bit fails
     for k in active:
         name = LABELS[k]
         if name == "edge_ring":
-            img[:6, :] += 6.0
-            img[-6:, :] += 6.0
-            img[:, :3] += 6.0
-            img[:, -3:] += 6.0
+            paint_edge_ring(img, width=5, grade=6.0)            # periphery / edge
         elif name == "center_blob":
-            cy, cx = h // 2, w // 2
-            img[cy - 12 : cy + 12, cx - 8 : cx + 8] += 6.5
+            paint_cluster(img, center=(h // 2, w // 2), half=(12, 8), grade=6.5)  # cluster
         elif name in ("leak_top", "leak_bottom"):
-            # IDENTICAL image signature for both identity classes:
-            # a faint vertical stripe in the middle columns. The image cannot
-            # tell top from bottom; only the electrical features can.
-            img[:, w // 2 - 2 : w // 2 + 2] += 3.0
+            # IDENTICAL high-grade vertical line (~ bit-line / column failure) for
+            # BOTH identity classes: the FBM image cannot tell top from bottom;
+            # only the electrical (tabular) word-line region differs.
+            paint_vertical_line(img, col=w // 2, width=3, grade=6.0)
     img += rng.normal(0.0, 0.3, size=(h, w))
     return np.clip(img, 0.0, MAX_GRADE)
 

@@ -19,7 +19,21 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 
-from fbm_multimodal.fusion.data import FusionDataset  # noqa: E402
+from fbm_multimodal.fusion.data import (  # noqa: E402
+    IMAGE_SHAPE,
+    MAX_GRADE,
+    FusionDataset,
+    binarize_fbm_grades,
+)
+from fbm_multimodal.fusion.fbm_patterns import (  # noqa: E402
+    binarize_fbm,
+    effective_rank,
+    eigenimage_norm_features,
+    paint_cluster,
+    paint_edge_ring,
+    paint_single_bit_scatter,
+    paint_vertical_line,
+)
 from fbm_multimodal.fusion.fusion_eval import FusionEvalReport  # noqa: E402
 
 
@@ -107,6 +121,109 @@ def plot_pattern_gallery(dataset: FusionDataset, out: Path) -> Path:
     )
     fig.subplots_adjust(top=0.88, bottom=0.08, wspace=0.22, hspace=0.42)
     return _save(fig, out, tight=False)
+
+
+def plot_binarized_pattern_gallery(dataset: FusionDataset, out: Path) -> Path:
+    """Show current experiment patterns after grade>=3 binarization."""
+    names = dataset.label_names
+    singles = [([i], f"single\n{names[i]}", "real_single") for i in range(len(names))]
+    pairs = [
+        (list(pair), f"synthetic pair\n{names[pair[0]]} + {names[pair[1]]}", "synthetic_composite")
+        for pair in combinations(range(len(names)), 2)
+    ]
+    panels = singles + pairs
+
+    fig, axes = plt.subplots(3, 4, figsize=(13.5, 9.2))
+    axes_flat = axes.ravel()
+    for ax, (want, title, group) in zip(axes_flat, panels):
+        idx = _first_index(dataset, want, group=group)
+        img = dataset.images[idx] if idx is not None else np.zeros(IMAGE_SHAPE)
+        ax.imshow(binarize_fbm_grades(img), cmap="gray_r", vmin=0, vmax=1, aspect="auto")
+        ax.set_title(title, fontsize=9)
+        ax.set_xticks([])
+        ax.set_yticks([])
+
+    for ax in axes_flat[len(panels):]:
+        ax.axis("off")
+
+    fig.suptitle("Binarized pattern gallery — grade >= 3 cells are shown as black", fontsize=12)
+    fig.text(
+        0.5,
+        0.025,
+        "This view follows the RSVD paper's idea: remove low-grade noise first, then inspect spatial structure.",
+        ha="center",
+        va="bottom",
+        fontsize=10,
+        color="#333333",
+    )
+    fig.subplots_adjust(top=0.88, bottom=0.08, wspace=0.22, hspace=0.42)
+    return _save(fig, out, tight=False)
+
+
+def plot_paper_pattern_stress_gallery(out: Path, *, seed: int = 0) -> Path:
+    """Reference stress patterns inspired by the FBM RSVD paper."""
+    patterns = _paper_reference_patterns(seed=seed)
+    names = list(patterns)
+    fig, axes = plt.subplots(2, len(names), figsize=(13.5, 5.8))
+
+    for col, name in enumerate(names):
+        img = patterns[name]
+        axes[0, col].imshow(img, cmap="inferno", vmin=0, vmax=MAX_GRADE, aspect="auto")
+        axes[0, col].set_title(name.replace("_", "\n"), fontsize=9)
+        axes[0, col].set_xticks([])
+        axes[0, col].set_yticks([])
+
+        axes[1, col].imshow(binarize_fbm_grades(img), cmap="gray_r", vmin=0, vmax=1, aspect="auto")
+        axes[1, col].set_xticks([])
+        axes[1, col].set_yticks([])
+
+    axes[0, 0].set_ylabel("raw\n0-8", fontsize=9)
+    axes[1, 0].set_ylabel("grade\n>=3", fontsize=9)
+    fig.suptitle("Paper-inspired FBM pattern stress set", fontsize=12)
+    fig.text(
+        0.5,
+        0.025,
+        "Random speckles should stay scattered; vertical, horizontal, and block patterns should remain visible after binarization.",
+        ha="center",
+        va="bottom",
+        fontsize=10,
+        color="#333333",
+    )
+    fig.subplots_adjust(top=0.84, bottom=0.12, wspace=0.18, hspace=0.18)
+    return _save(fig, out, tight=False)
+
+
+def _paper_reference_patterns(*, seed: int) -> dict[str, np.ndarray]:
+    rng = np.random.default_rng(seed)
+    h, w = IMAGE_SHAPE
+
+    def base() -> np.ndarray:
+        return rng.uniform(0.0, 0.45, size=IMAGE_SHAPE)
+
+    random_sparse = base()
+    rr = rng.integers(0, h, size=40)
+    cc = rng.integers(0, w, size=40)
+    random_sparse[rr, cc] += rng.uniform(3.0, 7.0, size=40)
+
+    vertical_line = base()
+    vertical_line[:, w // 2 - 1 : w // 2 + 1] += 6.2
+    vertical_line[rng.integers(0, h, 18), rng.integers(0, w, 18)] += rng.uniform(3.0, 5.5, 18)
+
+    short_horizontal = base()
+    y = h // 3
+    short_horizontal[y - 1 : y + 2, w // 2 - 13 : w // 2 + 13] += 6.0
+    short_horizontal[rng.integers(0, h, 18), rng.integers(0, w, 18)] += rng.uniform(3.0, 5.5, 18)
+
+    local_block = base()
+    local_block[h // 2 - 12 : h // 2 + 12, w // 2 - 7 : w // 2 + 7] += 6.4
+    local_block[rng.integers(0, h, 18), rng.integers(0, w, 18)] += rng.uniform(3.0, 5.5, 18)
+
+    return {
+        "random_sparse": np.clip(random_sparse, 0.0, MAX_GRADE),
+        "vertical_line": np.clip(vertical_line, 0.0, MAX_GRADE),
+        "short_horizontal": np.clip(short_horizontal, 0.0, MAX_GRADE),
+        "local_block": np.clip(local_block, 0.0, MAX_GRADE),
+    }
 
 
 def plot_training_curves(history: dict[str, list[float]], out: Path) -> Path:
@@ -231,6 +348,52 @@ def plot_identity_and_collapse(report: FusionEvalReport, ablation: dict | None, 
     return _save(fig, out)
 
 
+def plot_eigenimage_spectrum(out: Path, *, seed: int = 0) -> Path:
+    """Eigen-image norm decay: structured patterns are low-rank, random is high-rank.
+
+    Replicates the discriminator behind the paper's RSVD features (Kim et al. 2015,
+    Fig. 6 / Eq. 8): on the binarized FBM, structured failures (vertical line,
+    cluster, edge) concentrate their norm in the first few eigen-images, while a
+    random single-bit map spreads it across many.
+    """
+    h, w = IMAGE_SHAPE
+    rng = np.random.default_rng(seed)
+
+    def blank() -> np.ndarray:
+        img = np.zeros((h, w))
+        paint_single_bit_scatter(img, rng)  # realistic low-grade background
+        return img
+
+    vertical = blank(); paint_vertical_line(vertical, col=w // 2, width=3, grade=6.0)
+    cluster = blank(); paint_cluster(cluster, center=(h // 2, w // 2), half=(12, 8), grade=6.5)
+    edge = blank(); paint_edge_ring(edge, width=5, grade=6.0)
+    random_map = np.zeros((h, w))
+    rr, cc = rng.integers(0, h, 120), rng.integers(0, w, 120)
+    random_map[rr, cc] = 6.0  # many scattered HIGH-grade single bits -> high rank
+
+    patterns = {
+        "vertical line (column)": (vertical, "#4C78A8"),
+        "cluster": (cluster, "#54A24B"),
+        "edge ring": (edge, "#F58518"),
+        "random single-bit": (random_map, "#E45756"),
+    }
+    fig, ax = plt.subplots(figsize=(8.5, 5.0))
+    for name, (img, color) in patterns.items():
+        binary = binarize_fbm(img)
+        norms = eigenimage_norm_features(binary, k=20)
+        er = effective_rank(binary, energy=0.9)
+        ax.plot(range(1, len(norms) + 1), norms, marker="o", ms=3, color=color,
+                label=f"{name}  (eff. rank@90%={er})")
+    ax.set_yscale("log")
+    ax.set_xlabel("eigen-image index k")
+    ax.set_ylabel("eigen-image norm  ‖E_k‖ = s_kk  (log)")
+    ax.set_title("Eigen-image norm spectrum of binarized FBM (paper Eq. 8 / Fig. 6)\n"
+                 "structured = fast decay / low rank; random = slow decay / high rank")
+    ax.legend(fontsize=8)
+    ax.grid(alpha=0.3, which="both")
+    return _save(fig, out)
+
+
 def generate_all_figures(
     dataset: FusionDataset,
     history: dict[str, list[float]],
@@ -243,6 +406,9 @@ def generate_all_figures(
     return [
         plot_dataset_overview(dataset, out_dir / "01_dataset_overview.png"),
         plot_pattern_gallery(dataset, out_dir / "06_pattern_gallery.png"),
+        plot_binarized_pattern_gallery(dataset, out_dir / "07_binarized_pattern_gallery.png"),
+        plot_paper_pattern_stress_gallery(out_dir / "08_paper_pattern_stress_gallery.png"),
+        plot_eigenimage_spectrum(out_dir / "09_eigenimage_spectrum.png"),
         plot_training_curves(history, out_dir / "02_training_curves.png"),
         plot_head_group_accuracy(report, out_dir / "03_head_group_accuracy.png"),
         plot_kpi(report, out_dir / "04_kpi_product.png"),

@@ -459,3 +459,59 @@ def test_cli_evaluate_conditions_writes_markdown_report(tmp_path):
 
     assert exit_code == 0
     assert "Overall Status: PASS" in report_path.read_text()
+
+
+def test_evaluate_conditions_accepts_binary_prediction_columns_without_probabilities():
+    frame = pd.DataFrame(
+        {
+            "condition": ["binary", "binary", "binary", "binary"],
+            "chip_id": ["s1", "s2", "c1", "c2"],
+            "eval_group": ["real_single", "real_single", "real_composite", "real_composite"],
+            "true_a": [1, 0, 1, 1],
+            "true_b": [0, 1, 1, 1],
+            "pred_a": [1, 0, 1, 1],
+            "pred_b": [0, 1, 1, 1],
+        }
+    )
+
+    summary = evaluate_conditions(frame, labels=["a", "b"])
+
+    result = summary.iloc[0]
+    assert result["condition"] == "binary"
+    assert result["single_subset_accuracy"] == 1.0
+    assert result["composite_subset_accuracy"] == 1.0
+    assert result["kpi_product"] == 1.0
+    assert result["meets_all_targets"]
+
+
+def test_cli_evaluate_conditions_accepts_binary_prediction_columns(tmp_path):
+    predictions_path = tmp_path / "binary_predictions.csv"
+    summary_path = tmp_path / "summary.csv"
+    pd.DataFrame(
+        {
+            "condition": ["binary", "binary", "binary", "binary"],
+            "chip_id": ["s1", "s2", "c1", "c2"],
+            "eval_group": ["real_single", "real_single", "real_composite", "real_composite"],
+            "true_a": [1, 0, 1, 1],
+            "true_b": [0, 1, 1, 1],
+            "pred_a": [1, 0, 1, 1],
+            "pred_b": [0, 1, 1, 1],
+        }
+    ).to_csv(predictions_path, index=False)
+
+    exit_code = main(
+        [
+            "evaluate-conditions",
+            "--predictions",
+            str(predictions_path),
+            "--labels",
+            "a,b",
+            "--output",
+            str(summary_path),
+        ]
+    )
+
+    summary = pd.read_csv(summary_path)
+    assert exit_code == 0
+    assert summary.loc[0, "condition"] == "binary"
+    assert summary.loc[0, "kpi_product"] == 1.0

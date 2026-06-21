@@ -319,7 +319,9 @@ def _validate_prediction_frame(
 ) -> None:
     missing = [condition_column, group_column]
     for label in labels:
-        missing.extend([f"true_{label}", f"prob_{label}"])
+        missing.append(f"true_{label}")
+        if f"prob_{label}" not in frame.columns and f"pred_{label}" not in frame.columns:
+            missing.append(f"prob_{label} or pred_{label}")
     missing = [column for column in missing if column not in frame.columns]
     if missing:
         raise ValueError(f"prediction frame is missing required columns: {missing}")
@@ -336,8 +338,22 @@ def _subset_accuracy_for_group(
     if subset.empty:
         return float("nan")
     true = subset[[f"true_{label}" for label in labels]].astype(int).to_numpy()
-    pred = (subset[[f"prob_{label}" for label in labels]] >= threshold).astype(int).to_numpy()
+    pred = _prediction_matrix(subset, labels, threshold)
     return float(np.mean(np.all(true == pred, axis=1)))
+
+
+def _prediction_matrix(frame: pd.DataFrame, labels: list[str], threshold: float) -> np.ndarray:
+    columns = []
+    for label in labels:
+        prob_column = f"prob_{label}"
+        pred_column = f"pred_{label}"
+        if prob_column in frame.columns:
+            columns.append((frame[prob_column] >= threshold).astype(int))
+        elif pred_column in frame.columns:
+            columns.append(frame[pred_column].astype(int))
+        else:
+            raise ValueError(f"missing prediction column for label: {label}")
+    return pd.concat(columns, axis=1).to_numpy()
 
 
 def _support(frame: pd.DataFrame, group_name: str, group_column: str) -> int:

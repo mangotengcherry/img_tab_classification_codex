@@ -115,7 +115,9 @@ Expected prediction columns:
 - `chip_id`
 - `eval_group`: `real_single`, `real_composite`, or `synthetic_composite`
 - `true_<label>` for every label
-- `prob_<label>` for every label
+- `prob_<label>` for every label, or `pred_<label>` when only binary predictions are available
+
+`--threshold-grid` only changes results for `prob_<label>` columns. For `pred_<label>` inputs, the evaluator uses the supplied binary predictions directly.
 
 The evaluator reports:
 

@@ -49,6 +49,7 @@ def evaluate_conditions(
     labels: list[str],
     threshold: float = 0.5,
     condition_column: str = "condition",
+    run_column: str | None = None,
     group_column: str = "eval_group",
     single_group: str = "real_single",
     composite_group: str = "real_composite",
@@ -61,7 +62,20 @@ def evaluate_conditions(
     _validate_prediction_frame(predictions, labels, condition_column, group_column)
 
     summaries = []
-    for condition, condition_frame in predictions.groupby(condition_column, sort=True):
+    group_keys = [condition_column]
+    if run_column:
+        if run_column not in predictions.columns:
+            raise ValueError(f"run column not found: {run_column}")
+        group_keys.append(run_column)
+
+    groupby_arg: str | list[str] = group_keys[0] if len(group_keys) == 1 else group_keys
+    for group_key, condition_frame in predictions.groupby(groupby_arg, sort=True):
+        if run_column:
+            condition = group_key[0]
+            run_value = group_key[1]
+        else:
+            condition = group_key
+            run_value = None
         single_acc = _subset_accuracy_for_group(condition_frame, labels, single_group, group_column, threshold)
         composite_acc = _subset_accuracy_for_group(condition_frame, labels, composite_group, group_column, threshold)
         synthetic_acc = _subset_accuracy_for_group(
@@ -75,6 +89,7 @@ def evaluate_conditions(
         summaries.append(
             {
                 "condition": condition,
+                **({run_column: run_value} if run_column else {}),
                 "threshold": threshold,
                 "single_subset_accuracy": single_acc,
                 "composite_subset_accuracy": composite_acc,
@@ -105,12 +120,48 @@ def evaluate_conditions(
     return result.sort_values(["meets_all_targets", "kpi_product", "condition"], ascending=[False, False, True])
 
 
+def aggregate_condition_runs(
+    per_run_summary: pd.DataFrame,
+    *,
+    run_column: str,
+) -> pd.DataFrame:
+    """Aggregate per-run condition summaries into condition-level robustness metrics."""
+    if run_column not in per_run_summary.columns:
+        raise ValueError(f"run column not found: {run_column}")
+
+    rows = []
+    for condition, frame in per_run_summary.groupby("condition", sort=True):
+        row = {
+            "condition": condition,
+            "num_runs": int(frame[run_column].nunique()),
+            "all_runs_meet_targets": bool(frame["meets_all_targets"].all()),
+            "any_run_meets_targets": bool(frame["meets_all_targets"].any()),
+            "best_threshold_by_mean_kpi": _mode_or_first(frame["threshold"]),
+        }
+        for metric in ["single_subset_accuracy", "composite_subset_accuracy", "kpi_product"]:
+            values = frame[metric].astype(float)
+            row[f"{metric}_mean"] = float(values.mean())
+            row[f"{metric}_std"] = float(values.std(ddof=0))
+            row[f"{metric}_min"] = float(values.min())
+            row[f"{metric}_max"] = float(values.max())
+        rows.append(row)
+
+    result = pd.DataFrame(rows)
+    if result.empty:
+        return result
+    return result.sort_values(
+        ["all_runs_meet_targets", "kpi_product_mean", "condition"],
+        ascending=[False, False, True],
+    ).reset_index(drop=True)
+
+
 def evaluate_threshold_grid(
     predictions: pd.DataFrame,
     *,
     labels: list[str],
     thresholds: list[float],
     condition_column: str = "condition",
+    run_column: str | None = None,
     group_column: str = "eval_group",
     single_group: str = "real_single",
     composite_group: str = "real_composite",
@@ -128,6 +179,7 @@ def evaluate_threshold_grid(
             labels=labels,
             threshold=threshold,
             condition_column=condition_column,
+            run_column=run_column,
             group_column=group_column,
             single_group=single_group,
             composite_group=composite_group,
@@ -140,6 +192,7 @@ def evaluate_threshold_grid(
     ranked = all_results.sort_values(
         [
             "condition",
+            *([run_column] if run_column else []),
             "meets_all_targets",
             "kpi_product",
             "single_subset_accuracy",
@@ -148,7 +201,8 @@ def evaluate_threshold_grid(
         ],
         ascending=[True, False, False, False, False, True],
     )
-    best_per_condition = ranked.drop_duplicates(subset=["condition"], keep="first")
+    dedupe_columns = ["condition"] + ([run_column] if run_column else [])
+    best_per_condition = ranked.drop_duplicates(subset=dedupe_columns, keep="first")
     return best_per_condition.sort_values(
         ["meets_all_targets", "kpi_product", "condition"],
         ascending=[False, False, True],
@@ -240,3 +294,10 @@ def _required_other_metric(kpi_target: float, known_metric: float) -> float:
     if np.isnan(known_metric) or known_metric <= 0:
         return float("inf")
     return float(kpi_target / known_metric)
+
+
+def _mode_or_first(values: pd.Series) -> float:
+    modes = values.mode()
+    if not modes.empty:
+        return float(modes.iloc[0])
+    return float(values.iloc[0])

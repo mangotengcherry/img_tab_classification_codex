@@ -9,6 +9,7 @@ import pandas as pd
 from fbm_multimodal.active_learning import rank_unlabeled_for_review
 from fbm_multimodal.condition_eval import (
     TargetConfig,
+    aggregate_condition_runs,
     evaluate_conditions,
     evaluate_threshold_grid,
     load_condition_predictions,
@@ -61,6 +62,12 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     evaluate.add_argument("--labels", required=True, help="Comma-separated label names.")
     evaluate.add_argument("--output", required=True, help="Output condition summary CSV path.")
+    evaluate.add_argument("--run-column", default="", help="Optional seed/run column for per-run condition summaries.")
+    evaluate.add_argument(
+        "--aggregate-output",
+        default="",
+        help="Optional output CSV for condition-level aggregate metrics across runs.",
+    )
     evaluate.add_argument("--threshold", type=float, default=0.5, help="Probability threshold for binary labels.")
     evaluate.add_argument(
         "--threshold-grid",
@@ -115,11 +122,13 @@ def _evaluate_conditions(args: argparse.Namespace) -> int:
         kpi_product=args.kpi_target,
     )
     threshold_grid = _split_float_arg(args.threshold_grid)
+    run_column = args.run_column or None
     if threshold_grid:
         summary = evaluate_threshold_grid(
             predictions,
             labels=labels,
             thresholds=threshold_grid,
+            run_column=run_column,
             targets=targets,
         )
     else:
@@ -127,11 +136,19 @@ def _evaluate_conditions(args: argparse.Namespace) -> int:
             predictions,
             labels=labels,
             threshold=args.threshold,
+            run_column=run_column,
             targets=targets,
         )
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     summary.to_csv(output_path, index=False)
+    if args.aggregate_output:
+        if not run_column:
+            raise ValueError("--aggregate-output requires --run-column")
+        aggregate = aggregate_condition_runs(summary, run_column=run_column)
+        aggregate_path = Path(args.aggregate_output)
+        aggregate_path.parent.mkdir(parents=True, exist_ok=True)
+        aggregate.to_csv(aggregate_path, index=False)
     print(json.dumps(summarize_condition_report(summary, targets), ensure_ascii=False, indent=2))
     return 0
 

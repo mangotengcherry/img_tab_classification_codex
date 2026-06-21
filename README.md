@@ -90,6 +90,23 @@ PYTHONPATH=src python3 -m fbm_multimodal.cli evaluate-conditions \
   --kpi-target 0.65
 ```
 
+When predictions include repeated runs such as a `seed` column, write both per-run and aggregate summaries:
+
+```bash
+PYTHONPATH=src python3 -m fbm_multimodal.cli evaluate-conditions \
+  --prediction-glob "outputs/conditions/*.csv" \
+  --labels defect_a,defect_b,defect_c \
+  --output outputs/condition_by_seed.csv \
+  --run-column seed \
+  --aggregate-output outputs/condition_aggregate.csv \
+  --threshold-grid 0.30,0.35,0.40,0.45,0.50,0.55,0.60 \
+  --single-target 0.8 \
+  --composite-target 0.6 \
+  --kpi-target 0.65
+```
+
+The aggregate report includes mean, standard deviation, min, max, and whether all runs meet the targets.
+
 Expected prediction columns:
 
 - `condition`: experiment condition name, such as `image_only_synth`, `late_fusion`, or `mapped_fusion`

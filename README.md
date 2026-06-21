@@ -188,6 +188,8 @@ product KPI `0.65`를 만족하려면, single subset accuracy가 `0.8`인 condit
 
 ## 멀티모달 Fusion 실험 (image + tabular)
 
+> 👉 **처음이라면 먼저:** [쉬운 개요 — 컨셉과 평가 과정](docs/experiment_overview.md)
+
 > "이미지는 합성·증강이 가능하지만 tabular(전기 MSR)는 합성 불가인데, 둘을 fusion해 학습이 되는가?"
 > 에 답하는, 바로 실행 가능한 end-to-end 실험입니다. 전체 리포트:
 > **[reports/fusion_experiment_report.md](reports/fusion_experiment_report.md)** ·

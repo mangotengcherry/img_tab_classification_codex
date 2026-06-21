@@ -7,6 +7,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from fbm_multimodal.metrics import class_pair_metrics
+
 
 @dataclass(frozen=True)
 class TargetConfig:
@@ -153,6 +155,121 @@ def aggregate_condition_runs(
         ["all_runs_meet_targets", "kpi_product_mean", "condition"],
         ascending=[False, False, True],
     ).reset_index(drop=True)
+
+
+def evaluate_condition_per_class_metrics(
+    predictions: pd.DataFrame,
+    *,
+    labels: list[str],
+    summary: pd.DataFrame,
+    condition_column: str = "condition",
+    run_column: str | None = None,
+    group_column: str = "eval_group",
+) -> pd.DataFrame:
+    """Compute per-class precision/recall/F1 for each evaluated condition and group."""
+    _validate_prediction_frame(predictions, labels, condition_column, group_column)
+    if run_column and run_column not in predictions.columns:
+        raise ValueError(f"run column not found: {run_column}")
+
+    rows = []
+    for _, summary_row in summary.iterrows():
+        condition_frame = _frame_for_summary_row(
+            predictions,
+            summary_row,
+            condition_column=condition_column,
+            run_column=run_column,
+        )
+        threshold = float(summary_row["threshold"])
+        for group_name in sorted(condition_frame[group_column].dropna().unique()):
+            group_frame = condition_frame[condition_frame[group_column] == group_name]
+            if group_frame.empty:
+                continue
+            true = _true_label_frame(group_frame, labels)
+            pred = _pred_label_frame(group_frame, labels, threshold)
+            for label in labels:
+                metrics = _binary_class_metrics(true[label].to_numpy(), pred[label].to_numpy())
+                rows.append(
+                    {
+                        "condition": summary_row["condition"],
+                        **({run_column: summary_row[run_column]} if run_column else {}),
+                        "threshold": threshold,
+                        "eval_group": group_name,
+                        "label": label,
+                        "positive_support": int(true[label].sum()),
+                        **metrics,
+                    }
+                )
+
+    return pd.DataFrame(
+        rows,
+        columns=[
+            "condition",
+            *([run_column] if run_column else []),
+            "threshold",
+            "eval_group",
+            "label",
+            "positive_support",
+            "precision",
+            "recall",
+            "f1",
+        ],
+    )
+
+
+def evaluate_condition_class_pair_metrics(
+    predictions: pd.DataFrame,
+    *,
+    labels: list[str],
+    summary: pd.DataFrame,
+    condition_column: str = "condition",
+    run_column: str | None = None,
+    group_column: str = "eval_group",
+) -> pd.DataFrame:
+    """Compute class-pair subset accuracy for each condition and eval group."""
+    _validate_prediction_frame(predictions, labels, condition_column, group_column)
+    if run_column and run_column not in predictions.columns:
+        raise ValueError(f"run column not found: {run_column}")
+
+    rows = []
+    for _, summary_row in summary.iterrows():
+        condition_frame = _frame_for_summary_row(
+            predictions,
+            summary_row,
+            condition_column=condition_column,
+            run_column=run_column,
+        )
+        threshold = float(summary_row["threshold"])
+        for group_name in sorted(condition_frame[group_column].dropna().unique()):
+            group_frame = condition_frame[condition_frame[group_column] == group_name]
+            if group_frame.empty:
+                continue
+            true = _true_label_frame(group_frame, labels)
+            pred = _pred_label_frame(group_frame, labels, threshold)
+            for pair_name, metrics in class_pair_metrics(true, pred).items():
+                rows.append(
+                    {
+                        "condition": summary_row["condition"],
+                        **({run_column: summary_row[run_column]} if run_column else {}),
+                        "threshold": threshold,
+                        "eval_group": group_name,
+                        "class_pair": pair_name,
+                        "support": int(metrics["support"]),
+                        "subset_accuracy": float(metrics["subset_accuracy"]),
+                    }
+                )
+
+    return pd.DataFrame(
+        rows,
+        columns=[
+            "condition",
+            *([run_column] if run_column else []),
+            "threshold",
+            "eval_group",
+            "class_pair",
+            "support",
+            "subset_accuracy",
+        ],
+    )
 
 
 def evaluate_threshold_grid(
@@ -354,6 +471,48 @@ def _prediction_matrix(frame: pd.DataFrame, labels: list[str], threshold: float)
         else:
             raise ValueError(f"missing prediction column for label: {label}")
     return pd.concat(columns, axis=1).to_numpy()
+
+
+def _true_label_frame(frame: pd.DataFrame, labels: list[str]) -> pd.DataFrame:
+    return pd.DataFrame(
+        {label: frame[f"true_{label}"].astype(int).to_numpy() for label in labels},
+        index=frame.index,
+    )
+
+
+def _pred_label_frame(frame: pd.DataFrame, labels: list[str], threshold: float) -> pd.DataFrame:
+    return pd.DataFrame(
+        _prediction_matrix(frame, labels, threshold),
+        columns=labels,
+        index=frame.index,
+    )
+
+
+def _frame_for_summary_row(
+    predictions: pd.DataFrame,
+    summary_row: pd.Series,
+    *,
+    condition_column: str,
+    run_column: str | None,
+) -> pd.DataFrame:
+    mask = predictions[condition_column] == summary_row["condition"]
+    if run_column:
+        mask = mask & (predictions[run_column] == summary_row[run_column])
+    return predictions[mask]
+
+
+def _binary_class_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict[str, float]:
+    tp = float(((y_true == 1) & (y_pred == 1)).sum())
+    fp = float(((y_true == 0) & (y_pred == 1)).sum())
+    fn = float(((y_true == 1) & (y_pred == 0)).sum())
+    precision = tp / (tp + fp) if tp + fp > 0 else 0.0
+    recall = tp / (tp + fn) if tp + fn > 0 else 0.0
+    f1 = 2 * precision * recall / (precision + recall) if precision + recall > 0 else 0.0
+    return {
+        "precision": float(precision),
+        "recall": float(recall),
+        "f1": float(f1),
+    }
 
 
 def _support(frame: pd.DataFrame, group_name: str, group_column: str) -> int:

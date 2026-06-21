@@ -141,6 +141,20 @@ PYTHONPATH=src python3 -m fbm_multimodal.cli evaluate-conditions \
   --require-all-runs
 ```
 
+Write diagnostic slices for failure analysis:
+
+```bash
+PYTHONPATH=src python3 -m fbm_multimodal.cli evaluate-conditions \
+  --predictions outputs/condition_predictions.csv \
+  --labels defect_a,defect_b,defect_c \
+  --output outputs/condition_summary.csv \
+  --per-class-output outputs/condition_per_class.csv \
+  --class-pair-output outputs/condition_class_pair.csv \
+  --single-target 0.8 \
+  --composite-target 0.6 \
+  --kpi-target 0.65
+```
+
 Expected prediction columns:
 
 - `condition`: experiment condition name, such as `image_only_synth`, `late_fusion`, or `mapped_fusion`
@@ -157,6 +171,8 @@ The evaluator reports:
 - real composite subset accuracy
 - synthetic composite subset accuracy
 - synthetic-to-real composite gap
+- optional per-class precision, recall, F1, and positive support CSV
+- optional class-pair support and subset accuracy CSV
 - `single_subset_accuracy * composite_subset_accuracy`
 - selected `threshold`
 - pass/fail flags for single, composite, KPI, and all targets

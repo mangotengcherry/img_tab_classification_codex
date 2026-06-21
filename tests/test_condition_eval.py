@@ -5,6 +5,8 @@ import pandas as pd
 from fbm_multimodal.cli import main
 from fbm_multimodal.condition_eval import (
     aggregate_condition_runs,
+    evaluate_condition_class_pair_metrics,
+    evaluate_condition_per_class_metrics,
     evaluate_conditions,
     evaluate_threshold_grid,
     load_condition_predictions,
@@ -99,6 +101,50 @@ def test_evaluate_conditions_reports_synthetic_to_real_composite_gap():
     result = summary.iloc[0]
     assert result["real_synthetic_composite_gap"] == 0.5
     assert result["synthetic_composite_subset_accuracy"] == 1.0
+
+
+def test_evaluate_condition_per_class_metrics_uses_selected_threshold():
+    rows = []
+    rows += _condition_rows(
+        "fusion",
+        "real_composite",
+        truths=[(1, 1), (1, 1), (1, 1)],
+        probs=[(0.9, 0.8), (0.9, 0.2), (0.4, 0.8)],
+    )
+    predictions = pd.DataFrame(rows)
+    summary = evaluate_conditions(predictions, labels=["a", "b"], threshold=0.5)
+
+    per_class = evaluate_condition_per_class_metrics(predictions, labels=["a", "b"], summary=summary)
+
+    by_label = per_class.set_index(["eval_group", "label"])
+    assert by_label.loc[("real_composite", "a"), "positive_support"] == 3
+    assert by_label.loc[("real_composite", "a"), "recall"] == 2 / 3
+    assert by_label.loc[("real_composite", "b"), "f1"] == 0.8
+
+
+def test_evaluate_condition_class_pair_metrics_reports_real_and_synthetic_pairs():
+    rows = []
+    rows += _condition_rows(
+        "fusion",
+        "real_composite",
+        truths=[(1, 1), (1, 1), (1, 1)],
+        probs=[(0.9, 0.8), (0.9, 0.2), (0.4, 0.8)],
+    )
+    rows += _condition_rows(
+        "fusion",
+        "synthetic_composite",
+        truths=[(1, 1), (1, 1)],
+        probs=[(0.8, 0.7), (0.9, 0.8)],
+    )
+    predictions = pd.DataFrame(rows)
+    summary = evaluate_conditions(predictions, labels=["a", "b"], threshold=0.5)
+
+    class_pair = evaluate_condition_class_pair_metrics(predictions, labels=["a", "b"], summary=summary)
+
+    by_group = class_pair.set_index(["eval_group", "class_pair"])
+    assert by_group.loc[("real_composite", "a+b"), "support"] == 3
+    assert by_group.loc[("real_composite", "a+b"), "subset_accuracy"] == 1 / 3
+    assert by_group.loc[("synthetic_composite", "a+b"), "subset_accuracy"] == 1.0
 
 
 def test_cli_evaluate_conditions_writes_summary_csv_and_json(tmp_path, capsys):
@@ -459,6 +505,50 @@ def test_cli_evaluate_conditions_writes_markdown_report(tmp_path):
 
     assert exit_code == 0
     assert "Overall Status: PASS" in report_path.read_text()
+
+
+def test_cli_evaluate_conditions_writes_per_class_and_class_pair_outputs(tmp_path):
+    predictions_path = tmp_path / "predictions.csv"
+    summary_path = tmp_path / "summary.csv"
+    per_class_path = tmp_path / "per_class.csv"
+    class_pair_path = tmp_path / "class_pair.csv"
+    rows = []
+    rows += _condition_rows(
+        "fusion",
+        "real_composite",
+        truths=[(1, 1), (1, 1), (1, 1)],
+        probs=[(0.9, 0.8), (0.9, 0.2), (0.4, 0.8)],
+    )
+    rows += _condition_rows(
+        "fusion",
+        "synthetic_composite",
+        truths=[(1, 1), (1, 1)],
+        probs=[(0.8, 0.7), (0.9, 0.8)],
+    )
+    pd.DataFrame(rows).to_csv(predictions_path, index=False)
+
+    exit_code = main(
+        [
+            "evaluate-conditions",
+            "--predictions",
+            str(predictions_path),
+            "--labels",
+            "a,b",
+            "--output",
+            str(summary_path),
+            "--per-class-output",
+            str(per_class_path),
+            "--class-pair-output",
+            str(class_pair_path),
+        ]
+    )
+
+    per_class = pd.read_csv(per_class_path)
+    class_pair = pd.read_csv(class_pair_path)
+    assert exit_code == 0
+    assert set(per_class["label"]) == {"a", "b"}
+    assert class_pair.loc[0, "class_pair"] == "a+b"
+    assert set(class_pair["eval_group"]) == {"real_composite", "synthetic_composite"}
 
 
 def test_evaluate_conditions_accepts_binary_prediction_columns_without_probabilities():

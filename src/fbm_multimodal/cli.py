@@ -10,6 +10,8 @@ from fbm_multimodal.active_learning import rank_unlabeled_for_review
 from fbm_multimodal.condition_eval import (
     TargetConfig,
     aggregate_condition_runs,
+    evaluate_condition_class_pair_metrics,
+    evaluate_condition_per_class_metrics,
     evaluate_conditions,
     evaluate_threshold_grid,
     load_condition_predictions,
@@ -64,6 +66,8 @@ def _build_parser() -> argparse.ArgumentParser:
     evaluate.add_argument("--labels", required=True, help="Comma-separated label names.")
     evaluate.add_argument("--output", required=True, help="Output condition summary CSV path.")
     evaluate.add_argument("--report-output", default="", help="Optional Markdown PASS/FAIL report output path.")
+    evaluate.add_argument("--per-class-output", default="", help="Optional per-class precision/recall/F1 CSV path.")
+    evaluate.add_argument("--class-pair-output", default="", help="Optional class-pair subset accuracy CSV path.")
     evaluate.add_argument("--run-column", default="", help="Optional seed/run column for per-run condition summaries.")
     evaluate.add_argument(
         "--aggregate-output",
@@ -165,6 +169,26 @@ def _evaluate_conditions(args: argparse.Namespace) -> int:
         aggregate_path = Path(args.aggregate_output)
         aggregate_path.parent.mkdir(parents=True, exist_ok=True)
         aggregate.to_csv(aggregate_path, index=False)
+    if args.per_class_output:
+        per_class = evaluate_condition_per_class_metrics(
+            predictions,
+            labels=labels,
+            summary=summary,
+            run_column=run_column,
+        )
+        per_class_path = Path(args.per_class_output)
+        per_class_path.parent.mkdir(parents=True, exist_ok=True)
+        per_class.to_csv(per_class_path, index=False)
+    if args.class_pair_output:
+        class_pair = evaluate_condition_class_pair_metrics(
+            predictions,
+            labels=labels,
+            summary=summary,
+            run_column=run_column,
+        )
+        class_pair_path = Path(args.class_pair_output)
+        class_pair_path.parent.mkdir(parents=True, exist_ok=True)
+        class_pair.to_csv(class_pair_path, index=False)
     if args.report_output:
         report_path = Path(args.report_output)
         report_path.parent.mkdir(parents=True, exist_ok=True)

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from glob import glob
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -19,6 +21,26 @@ class TargetConfig:
     @property
     def has_target_tension(self) -> bool:
         return self.minimum_product_from_individual_targets < self.kpi_product
+
+
+def load_condition_predictions(path_pattern: str) -> pd.DataFrame:
+    """Load one or more condition prediction CSV files.
+
+    Files without a condition column inherit the file stem as their condition.
+    Files with a condition column keep their explicit values.
+    """
+    paths = sorted(glob(path_pattern))
+    if not paths:
+        raise FileNotFoundError(f"no prediction files matched pattern: {path_pattern}")
+
+    frames = []
+    for path_text in paths:
+        path = Path(path_text)
+        frame = pd.read_csv(path)
+        if "condition" not in frame.columns:
+            frame.insert(0, "condition", path.stem)
+        frames.append(frame)
+    return pd.concat(frames, ignore_index=True)
 
 
 def evaluate_conditions(

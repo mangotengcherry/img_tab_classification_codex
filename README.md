@@ -64,6 +64,19 @@ PYTHONPATH=src python3 -m fbm_multimodal.cli evaluate-conditions \
   --kpi-target 0.65
 ```
 
+Evaluate one CSV per condition by glob. When a file has no `condition` column, the file stem becomes the condition name:
+
+```bash
+PYTHONPATH=src python3 -m fbm_multimodal.cli evaluate-conditions \
+  --prediction-glob "outputs/conditions/*.csv" \
+  --labels defect_a,defect_b,defect_c \
+  --output outputs/condition_summary.csv \
+  --threshold-grid 0.30,0.35,0.40,0.45,0.50,0.55,0.60 \
+  --single-target 0.8 \
+  --composite-target 0.6 \
+  --kpi-target 0.65
+```
+
 Sweep scalar thresholds and keep the best threshold per condition:
 
 ```bash

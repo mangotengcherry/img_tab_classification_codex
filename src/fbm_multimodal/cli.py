@@ -11,6 +11,7 @@ from fbm_multimodal.condition_eval import (
     TargetConfig,
     evaluate_conditions,
     evaluate_threshold_grid,
+    load_condition_predictions,
     summarize_condition_report,
 )
 from fbm_multimodal.measurement import MeasurementMap
@@ -52,7 +53,12 @@ def _build_parser() -> argparse.ArgumentParser:
         "evaluate-conditions",
         help="Evaluate condition-level single/composite subset accuracy and KPI gates.",
     )
-    evaluate.add_argument("--predictions", required=True, help="CSV with condition, eval_group, true_*, prob_* columns.")
+    evaluate.add_argument("--predictions", default="", help="CSV with condition, eval_group, true_*, prob_* columns.")
+    evaluate.add_argument(
+        "--prediction-glob",
+        default="",
+        help="Glob for one CSV per condition. Files without condition column use the file stem.",
+    )
     evaluate.add_argument("--labels", required=True, help="Comma-separated label names.")
     evaluate.add_argument("--output", required=True, help="Output condition summary CSV path.")
     evaluate.add_argument("--threshold", type=float, default=0.5, help="Probability threshold for binary labels.")
@@ -101,7 +107,7 @@ def _rank_unlabeled(args: argparse.Namespace) -> int:
 
 
 def _evaluate_conditions(args: argparse.Namespace) -> int:
-    predictions = pd.read_csv(args.predictions)
+    predictions = _load_prediction_input(args.predictions, args.prediction_glob)
     labels = _split_csv_arg(args.labels)
     targets = TargetConfig(
         single_subset_accuracy=args.single_target,
@@ -128,6 +134,16 @@ def _evaluate_conditions(args: argparse.Namespace) -> int:
     summary.to_csv(output_path, index=False)
     print(json.dumps(summarize_condition_report(summary, targets), ensure_ascii=False, indent=2))
     return 0
+
+
+def _load_prediction_input(predictions_path: str, prediction_glob: str) -> pd.DataFrame:
+    if predictions_path and prediction_glob:
+        raise ValueError("use only one of --predictions or --prediction-glob")
+    if prediction_glob:
+        return load_condition_predictions(prediction_glob)
+    if predictions_path:
+        return pd.read_csv(predictions_path)
+    raise ValueError("one of --predictions or --prediction-glob is required")
 
 
 def _split_csv_arg(value: str) -> list[str]:

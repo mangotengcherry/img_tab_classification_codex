@@ -1,33 +1,33 @@
-# FBM Multi-Modal Experiment Toolkit
+# FBM 멀티모달 실험 도구
 
-This repository contains a lightweight experiment scaffold for FBM image and WL/electrical measurement multi-label classification.
+이 저장소는 FBM image와 WL/electrical measurement tabular feature를 함께 사용하는 multi-label classification 실험을 위한 경량 도구 모음입니다.
 
-It implements the data contracts and evaluation utilities from `plan.md`:
+`plan.md`에 정리된 데이터 계약과 평가 유틸리티를 코드로 제공합니다.
 
-- FBM intensity normalization for 0..8 graded images
-- Measurement mapping validation without assuming `MSR_*` suffix order is physical order
-- Multi-label metrics, class-wise threshold search, class-pair metrics, and synthetic-to-real gap reports
-- Synthetic FBM composition modes
-- Active-learning ranking for unlabeled chip review
-- CLI helpers for mapping coverage and review candidate selection
+- `0..8` grade로 표현된 FBM image intensity 정규화
+- `MSR_*` suffix 순서를 물리 위치로 가정하지 않는 measurement mapping 검증
+- multi-label metric, class-wise threshold 탐색, class-pair metric, synthetic-to-real gap 리포트
+- synthetic FBM 합성 모드
+- unlabeled chip review를 위한 active-learning ranking
+- mapping coverage, review candidate 선정, 조건별 성능 평가용 CLI
 
-## Install
+## 설치
 
-Use the system Python available in this workspace:
+현재 workspace에서 사용할 수 있는 Python 환경 기준으로 설치합니다.
 
 ```bash
 python3 -m pip install -e .
 ```
 
-## Run Tests
+## 테스트 실행
 
 ```bash
 PYTHONPATH=src python3 -m pytest -q
 ```
 
-## CLI Examples
+## CLI 예시
 
-Validate that `measurement_map.csv` covers all `MSR_*` columns in a chip manifest:
+chip manifest의 모든 `MSR_*` column이 `measurement_map.csv`에 매핑되어 있는지 확인합니다.
 
 ```bash
 PYTHONPATH=src python3 -m fbm_multimodal.cli validate-map \
@@ -35,7 +35,7 @@ PYTHONPATH=src python3 -m fbm_multimodal.cli validate-map \
   --measurement-map data/measurement_map.csv
 ```
 
-Rank unlabeled chips for engineering review:
+unlabeled chip 중 엔지니어 review를 요청할 후보를 우선순위화합니다.
 
 ```bash
 PYTHONPATH=src python3 -m fbm_multimodal.cli rank-unlabeled \
@@ -46,13 +46,13 @@ PYTHONPATH=src python3 -m fbm_multimodal.cli rank-unlabeled \
   --output outputs/review_queue.csv
 ```
 
-Expected candidate probability columns:
+candidate prediction CSV에 기대하는 probability column은 다음과 같습니다.
 
 - `prob_<label>`
-- optional `image_prob_<label>`
-- optional `tabular_prob_<label>`
+- 선택 column: `image_prob_<label>`
+- 선택 column: `tabular_prob_<label>`
 
-Evaluate experiment conditions against the current subset-accuracy targets:
+현재 subset accuracy 목표 기준으로 실험 조건별 성능을 평가합니다.
 
 ```bash
 PYTHONPATH=src python3 -m fbm_multimodal.cli evaluate-conditions \
@@ -64,7 +64,7 @@ PYTHONPATH=src python3 -m fbm_multimodal.cli evaluate-conditions \
   --kpi-target 0.65
 ```
 
-Evaluate one CSV per condition by glob. When a file has no `condition` column, the file stem becomes the condition name:
+조건별 CSV가 따로 있을 때는 glob으로 한 번에 평가할 수 있습니다. 파일에 `condition` column이 없으면 파일명이 condition 이름으로 사용됩니다.
 
 ```bash
 PYTHONPATH=src python3 -m fbm_multimodal.cli evaluate-conditions \
@@ -77,7 +77,7 @@ PYTHONPATH=src python3 -m fbm_multimodal.cli evaluate-conditions \
   --kpi-target 0.65
 ```
 
-Sweep scalar thresholds and keep the best threshold per condition:
+scalar threshold 후보를 sweep하고, condition별로 가장 좋은 threshold를 선택합니다.
 
 ```bash
 PYTHONPATH=src python3 -m fbm_multimodal.cli evaluate-conditions \
@@ -90,7 +90,7 @@ PYTHONPATH=src python3 -m fbm_multimodal.cli evaluate-conditions \
   --kpi-target 0.65
 ```
 
-When predictions include repeated runs such as a `seed` column, write both per-run and aggregate summaries:
+prediction에 `seed` 같은 repeated run column이 있으면 run별 summary와 condition-level aggregate summary를 함께 저장합니다.
 
 ```bash
 PYTHONPATH=src python3 -m fbm_multimodal.cli evaluate-conditions \
@@ -106,10 +106,10 @@ PYTHONPATH=src python3 -m fbm_multimodal.cli evaluate-conditions \
   --kpi-target 0.65
 ```
 
-The aggregate report includes mean, standard deviation, min, max, and whether all runs meet the targets.
-The Markdown report states PASS/FAIL, the recommended condition, the selected threshold, and the remaining KPI gap when no condition passes.
+aggregate report에는 평균, 표준편차, 최소값, 최대값, 모든 run이 목표를 만족했는지 여부가 포함됩니다.
+Markdown report에는 PASS/FAIL, 추천 condition, 선택 threshold, 목표를 만족하지 못했을 때의 KPI gap이 기록됩니다.
 
-For CI or service-readiness gates, add `--fail-on-miss`. The evaluator still writes the CSV/Markdown artifacts, but exits with code `2` when no condition meets the single, composite, and KPI targets:
+CI 또는 서비스 투입 가능 여부를 gate로 판단하려면 `--fail-on-miss`를 추가합니다. 이 옵션을 사용해도 CSV/Markdown artifact는 저장되며, single/composite/KPI 목표를 모두 만족하는 condition이 없으면 exit code `2`로 종료됩니다.
 
 ```bash
 PYTHONPATH=src python3 -m fbm_multimodal.cli evaluate-conditions \
@@ -124,7 +124,7 @@ PYTHONPATH=src python3 -m fbm_multimodal.cli evaluate-conditions \
   --fail-on-miss
 ```
 
-When using repeated seeds, add `--require-all-runs` to make the gate pass only if at least one condition meets all targets on every run:
+repeated seed를 사용할 때는 `--require-all-runs`를 추가하면, 하나 이상의 condition이 모든 run에서 목표를 만족해야 gate가 통과됩니다.
 
 ```bash
 PYTHONPATH=src python3 -m fbm_multimodal.cli evaluate-conditions \
@@ -141,7 +141,7 @@ PYTHONPATH=src python3 -m fbm_multimodal.cli evaluate-conditions \
   --require-all-runs
 ```
 
-Write diagnostic slices for failure analysis:
+실패 원인 분석을 위한 세부 slice도 별도 CSV로 저장할 수 있습니다.
 
 ```bash
 PYTHONPATH=src python3 -m fbm_multimodal.cli evaluate-conditions \
@@ -155,40 +155,40 @@ PYTHONPATH=src python3 -m fbm_multimodal.cli evaluate-conditions \
   --kpi-target 0.65
 ```
 
-Expected prediction columns:
+prediction CSV에 기대하는 column은 다음과 같습니다.
 
-- `condition`: experiment condition name, such as `image_only_synth`, `late_fusion`, or `mapped_fusion`
+- `condition`: `image_only_synth`, `late_fusion`, `mapped_fusion` 같은 실험 조건 이름
 - `chip_id`
-- `eval_group`: `real_single`, `real_composite`, or `synthetic_composite`
-- `true_<label>` for every label
-- `prob_<label>` for every label, or `pred_<label>` when only binary predictions are available
+- `eval_group`: `real_single`, `real_composite`, `synthetic_composite` 중 하나
+- 모든 label에 대한 `true_<label>`
+- 모든 label에 대한 `prob_<label>`, 또는 binary prediction만 있을 때는 `pred_<label>`
 
-`--threshold-grid` only changes results for `prob_<label>` columns. For `pred_<label>` inputs, the evaluator uses the supplied binary predictions directly.
+`--threshold-grid`는 `prob_<label>` column이 있을 때만 결과에 영향을 줍니다. `pred_<label>` 입력은 이미 binary prediction이므로 evaluator가 해당 값을 그대로 사용합니다.
 
-The evaluator reports:
+evaluator가 리포트하는 항목은 다음과 같습니다.
 
-- single-defect subset accuracy
-- real composite subset accuracy
+- 단일 불량 subset accuracy
+- 실제 중첩 불량 subset accuracy
 - synthetic composite subset accuracy
 - synthetic-to-real composite gap
-- optional per-class precision, recall, F1, and positive support CSV
-- optional class-pair support and subset accuracy CSV
+- 선택 출력: per-class precision, recall, F1, positive support CSV
+- 선택 출력: class-pair support와 subset accuracy CSV
 - `single_subset_accuracy * composite_subset_accuracy`
-- selected `threshold`
-- pass/fail flags for single, composite, KPI, and all targets
-- required composite accuracy at the observed single accuracy to reach the KPI target
+- 선택된 `threshold`
+- single, composite, KPI, 전체 목표에 대한 pass/fail flag
+- 관측된 single accuracy에서 KPI target을 만족하기 위해 필요한 composite accuracy
 
-Note that the individual minimums alone do not imply the product target:
+개별 최소 목표를 만족한다고 해서 product KPI가 자동으로 만족되는 것은 아닙니다.
 
 ```text
 0.8 * 0.6 = 0.48
 ```
 
-To reach a product KPI of `0.65`, a condition with single subset accuracy `0.8` needs composite subset accuracy at least `0.8125`.
+product KPI `0.65`를 만족하려면, single subset accuracy가 `0.8`인 condition은 composite subset accuracy가 최소 `0.8125` 이상이어야 합니다.
 
 ## Measurement Map
 
-`measurement_map.csv` should include:
+`measurement_map.csv`는 다음 column을 포함하는 형태를 권장합니다.
 
 ```csv
 feature_name,measurement_condition,measurement_type,wl_index,physical_region,physical_order
@@ -196,4 +196,4 @@ MSR_000,read,leakage,100,top,2
 MSR_001,read,leakage,0,bottom,0
 ```
 
-`physical_order` is metadata for position-aware experiments. The code does not infer physical order from the `MSR_*` suffix.
+`physical_order`는 position-aware experiment를 위한 metadata입니다. 이 코드는 `MSR_*` suffix에서 물리 순서를 추론하지 않습니다.

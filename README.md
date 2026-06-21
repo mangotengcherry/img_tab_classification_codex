@@ -52,6 +52,44 @@ Expected candidate probability columns:
 - optional `image_prob_<label>`
 - optional `tabular_prob_<label>`
 
+Evaluate experiment conditions against the current subset-accuracy targets:
+
+```bash
+PYTHONPATH=src python3 -m fbm_multimodal.cli evaluate-conditions \
+  --predictions outputs/condition_predictions.csv \
+  --labels defect_a,defect_b,defect_c \
+  --output outputs/condition_summary.csv \
+  --single-target 0.8 \
+  --composite-target 0.6 \
+  --kpi-target 0.65
+```
+
+Expected prediction columns:
+
+- `condition`: experiment condition name, such as `image_only_synth`, `late_fusion`, or `mapped_fusion`
+- `chip_id`
+- `eval_group`: `real_single`, `real_composite`, or `synthetic_composite`
+- `true_<label>` for every label
+- `prob_<label>` for every label
+
+The evaluator reports:
+
+- single-defect subset accuracy
+- real composite subset accuracy
+- synthetic composite subset accuracy
+- synthetic-to-real composite gap
+- `single_subset_accuracy * composite_subset_accuracy`
+- pass/fail flags for single, composite, KPI, and all targets
+- required composite accuracy at the observed single accuracy to reach the KPI target
+
+Note that the individual minimums alone do not imply the product target:
+
+```text
+0.8 * 0.6 = 0.48
+```
+
+To reach a product KPI of `0.65`, a condition with single subset accuracy `0.8` needs composite subset accuracy at least `0.8125`.
+
 ## Measurement Map
 
 `measurement_map.csv` should include:

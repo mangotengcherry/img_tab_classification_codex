@@ -6,6 +6,7 @@
 - 기존 image-only + synthetic composite 학습은 유지하되, synthetic-to-real gap을 별도 지표로 관리한다.
 - `MSR_000` ~ `MSR_200` 번호 순서는 물리 WL 순서로 가정하지 않는다. 별도 mapping table로 feature와 WL/측정조건/물리 위치를 연결한다.
 - 최종 KPI는 `single subset acc * composite subset acc`를 유지하고, 보조 지표로 per-class F1/recall, class-pair subset acc, real-vs-synthetic gap, label cost 대비 성능 상승량을 본다.
+- 목표값 사이에는 수학적 긴장점이 있다. `single=0.8`, `composite=0.6`만 만족하면 product는 `0.48`이므로, product `0.65`를 달성하려면 둘 중 하나가 더 높아야 한다. 예를 들어 single이 `0.8`이면 composite은 최소 `0.8125`가 필요하다.
 
 ## Key Experiments
 
@@ -15,6 +16,7 @@
 - test set은 `real single`, `real composite`, `synthetic composite`를 분리한다.
 - 모델 선택은 synthetic validation이 아니라 real validation 성능 기준으로 한다.
 - threshold는 `0.5 fixed`, `class-wise threshold`, `class-pair-sensitive threshold`를 비교한다.
+- 조건별 최종 판정은 `condition`, `eval_group`, `true_<label>`, `prob_<label>` 형식의 prediction CSV를 `evaluate-conditions` CLI에 넣어 수행한다.
 
 ### E1: Image-Only Baseline
 
@@ -132,6 +134,7 @@ Multi-modal 모델은 추가로 다음 값을 저장한다.
 - 상하 flip ablation에서는 image와 mapped physical region이 함께 변환되는 조건과 비활성 조건을 분리한다.
 - 모든 핵심 실험은 최소 3개 seed로 반복하고 평균, 표준편차, confidence interval을 기록한다.
 - active learning은 동일 라벨 budget에서 random sampling, uncertainty sampling, disagreement sampling, cluster representative sampling을 비교한다.
+- 조건 평가기는 `single >= 0.8`, `composite >= 0.6`, `single * composite >= 0.65`를 별도 gate로 보고, 개별 최소값은 만족하지만 product를 만족하지 못하는 조건을 실패로 분류한다.
 
 ## Assumptions
 

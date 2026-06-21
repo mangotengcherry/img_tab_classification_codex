@@ -3,6 +3,7 @@
 __all__ = [
     "active_learning",
     "baselines",
+    "condition_eval",
     "features",
     "image",
     "manifest",

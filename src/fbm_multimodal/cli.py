@@ -7,6 +7,7 @@ from pathlib import Path
 import pandas as pd
 
 from fbm_multimodal.active_learning import rank_unlabeled_for_review
+from fbm_multimodal.condition_eval import TargetConfig, evaluate_conditions, summarize_condition_report
 from fbm_multimodal.measurement import MeasurementMap
 
 
@@ -17,6 +18,8 @@ def main(argv: list[str] | None = None) -> int:
         return _validate_map(args)
     if args.command == "rank-unlabeled":
         return _rank_unlabeled(args)
+    if args.command == "evaluate-conditions":
+        return _evaluate_conditions(args)
     parser.print_help()
     return 1
 
@@ -39,6 +42,18 @@ def _build_parser() -> argparse.ArgumentParser:
     rank.add_argument("--budget", required=True, type=int, help="Number of chips to select.")
     rank.add_argument("--output", required=True, help="Output ranked CSV path.")
     rank.add_argument("--embedding-columns", default="", help="Optional comma-separated embedding columns.")
+
+    evaluate = subparsers.add_parser(
+        "evaluate-conditions",
+        help="Evaluate condition-level single/composite subset accuracy and KPI gates.",
+    )
+    evaluate.add_argument("--predictions", required=True, help="CSV with condition, eval_group, true_*, prob_* columns.")
+    evaluate.add_argument("--labels", required=True, help="Comma-separated label names.")
+    evaluate.add_argument("--output", required=True, help="Output condition summary CSV path.")
+    evaluate.add_argument("--threshold", type=float, default=0.5, help="Probability threshold for binary labels.")
+    evaluate.add_argument("--single-target", type=float, default=0.8, help="Target single-defect subset accuracy.")
+    evaluate.add_argument("--composite-target", type=float, default=0.6, help="Target composite-defect subset accuracy.")
+    evaluate.add_argument("--kpi-target", type=float, default=0.65, help="Target single*composite KPI product.")
     return parser
 
 
@@ -72,6 +87,27 @@ def _rank_unlabeled(args: argparse.Namespace) -> int:
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     ranked.to_csv(output_path, index=False)
+    return 0
+
+
+def _evaluate_conditions(args: argparse.Namespace) -> int:
+    predictions = pd.read_csv(args.predictions)
+    labels = _split_csv_arg(args.labels)
+    targets = TargetConfig(
+        single_subset_accuracy=args.single_target,
+        composite_subset_accuracy=args.composite_target,
+        kpi_product=args.kpi_target,
+    )
+    summary = evaluate_conditions(
+        predictions,
+        labels=labels,
+        threshold=args.threshold,
+        targets=targets,
+    )
+    output_path = Path(args.output)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    summary.to_csv(output_path, index=False)
+    print(json.dumps(summarize_condition_report(summary, targets), ensure_ascii=False, indent=2))
     return 0
 
 

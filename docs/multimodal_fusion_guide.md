@@ -36,6 +36,41 @@
 
 ---
 
+## 1.5 학술적 배경 — 문제 정식화와 관련 연구
+
+이 절은 위 직관을 문헌에 비춰 정식화한다(참고문헌은 문서 끝).
+
+**문제 정식화.** 각 chip을 `(xᴵ, xᵀ, y)`로 둔다 — `xᴵ` image, `xᵀ` tabular(전기 MSR),
+`y ∈ {0,1}ᴸ` multi-label. tabular 관측 여부를 지시변수 `mᵀ ∈ {0,1}`로 두면, 본 문제의 결측은
+**무작위가 아니다**: synthetic 샘플은 *항상* `mᵀ=0`이고 그 결측은 라벨·그룹과 상관된다.
+이는 Rubin(1976)의 분류에서 **MNAR(Missing Not At Random)** 에 해당한다. 따라서 결측을
+평균대치/생성모델로 메우면 추정량에 편향이 들어간다(특히 전기로 정의되는 정체성 클래스). 이것이
+"가짜 tabular를 만들지 않는다"의 **통계적** 근거다 — 단순 누락 정책이 아니라 MNAR 가정에서
+편향을 피하는 선택이다.
+
+**언제 fusion이 이득인가(이론).** Huang et al.(NeurIPS 2021)은 "각 모달리티를 공통 잠재공간으로
+인코딩 후 결합"하는 표준 fusion에서 다모달이 단일모달보다 **모집단 위험(population risk)이 작음을
+증명**했다 — 직관은 다모달이 잠재표현을 더 정확히 추정한다는 것. 단 이 이득은 *paired 데이터가
+충분*하고 *모달리티가 상호보완적*일 때 실현된다. 본 문제의 정체성 클래스는 image-only의 베이즈
+오류가 0으로 못 내려가는(이미지가 동일) 전형적 경우이고 tabular가 그 정보를 보완하므로, 이론상
+fusion 이득이 **가장 큰** 구간이다(§3 함정 B).
+
+**왜 naive fusion이 오히려 더 나쁠 수 있는가.** Wang et al.(CVPR 2020)은 다모달 망이 *최고
+단일모달보다 자주 못한* 현상을 보고하고 원인을 (1) 용량 증가로 인한 과적합, (2) 모달리티별
+과적합/일반화 **속도 차이**로 규명했다(해법: Gradient Blending). Peng et al.(CVPR 2022, OGM-GE)과
+Wu et al.(ICML 2022)은 학습이 **지배 모달리티로 쏠려(greedy)** 약한 모달리티가 under-optimized
+된다고 보였다. 본 설계의 image-rich(synthetic) 상황은 이 "쏠림"이 구조적으로 image 쪽으로
+일어나는 케이스이며, **modality dropout·2-stage freeze·collapse 진단**(§2④,②/§3 A)은 정확히 이
+실패를 막는 장치다.
+
+**결측 모달리티 학습 계열.** 학습·추론 양쪽에서 모달리티가 빠지는 상황은 Ma & Peng(SMIL,
+AAAI 2021)이 정식 연구했고, 모달리티 무작위 제거(ModDrop, Neverova et al., TPAMI 2016)는 결측에
+견고한 표현을 학습시키는 표준 기법이다. 본 문서의 **loss masking(①)·modality dropout(④)** 은 이
+계열에 속한다. 융합 구조(early/late/intermediate)와 co-learning 분류는 Baltrušaitis et al.
+(TPAMI 2019) taxonomy를 따른다 — late calibrator(③)=late fusion, 3-head joint=intermediate fusion.
+
+---
+
 ## 2. 가능하게 만드는 4가지 방법 (안전한 순서)
 
 ### ① Loss masking — 각 샘플을 valid한 head로만 흘린다 *(학습 자체는 바로 가능)*
@@ -158,3 +193,42 @@ gain은 best-unimodal 대비로, collapse/identity는 별도 진단으로 봅니
 - **follow rate**: real composite에서 (image 오답 ∧ tabular 정답)인 행 중 fusion 정답 비율.
 - **identity slice**: 정체성 label을 하나라도 가진 real 행에서의 head별 subset acc와
   `tabular_only − image_only` 우위.
+
+### 평가의 통계적 엄밀성 (메모)
+
+- **subset accuracy = exact-match ratio.** multi-label에서 가장 엄격한 지표(전 label 동시 정답).
+  보조로 Hamming accuracy(label 평균)를 병기하면 부분 정답 경향을 본다.
+- **KPI = single×composite (곱)** 은 두 비율 추정량의 곱이라, 작은 composite n에서 분산이 크고
+  gameable하다. 점추정만 보지 말고 **두 항·n·신뢰구간**을 항상 동반한다(KPI 카드).
+- **소표본 신뢰구간:** composite/class-pair는 support가 작아 정규근사가 깨진다 → **Wilson 구간**
+  또는 그룹(wafer) 단위 **부트스트랩**을 쓴다. seed 반복(가중치 분산)과 표본 분산은 다른 출처임을
+  구분한다.
+- **확률 품질:** late calibrator·uncertainty 기반 의사결정은 확률 신뢰도에 의존하므로
+  **calibration(ECE/reliability diagram; Guo et al. 2017)** 을 F1·acc와 별도로 본다.
+- **누수 차단:** group split(§ 실험계획)·threshold tuning split 분리·라벨 정의 feature 배제는
+  내적 타당성(internal validity)의 전제다.
+
+---
+
+## 참고문헌
+
+1. W. Wang, D. Tran, M. Feiszli. "What Makes Training Multi-Modal Classification Networks Hard?"
+   *CVPR* 2020. arXiv:1905.12681. — 다모달이 최고 단일모달보다 자주 못함; 모달리티별 과적합 속도 차이; Gradient Blending.
+2. Y. Huang, C. Du, Z. Xue, X. Chen, H. Zhao, L. Huang. "What Makes Multi-modal Learning Better than
+   Single (Provably)." *NeurIPS* 2021. arXiv:2106.04538. — 표준 fusion의 모집단 위험 감소 증명.
+3. X. Peng, Y. Wei, A. Deng, D. Wang, D. Hu. "Balanced Multimodal Learning via On-the-fly Gradient
+   Modulation (OGM-GE)." *CVPR* 2022 (oral). arXiv:2203.15332. — 지배 모달리티 쏠림과 균형화.
+4. N. Wu, S. Jastrzebski, K. Cho, K. J. Geras. "Characterizing and Overcoming the Greedy Nature of
+   Learning in Multi-modal DNNs." *ICML* 2022. — greedy(쏠림) 학습 규명.
+5. M. Ma, X. Peng. "SMIL: Multimodal Learning with Severely Missing Modality." *AAAI* 2021.
+   arXiv:2103.05677. — 학습·추론 결측 모달리티 정식 연구.
+6. N. Neverova, C. Wolf, G. Taylor, F. Nebout. "ModDrop: Adaptive Multi-modal Gesture Recognition."
+   *IEEE TPAMI* 2016. — 모달리티 dropout.
+7. T. Baltrušaitis, C. Ahuja, L.-P. Morency. "Multimodal Machine Learning: A Survey and Taxonomy."
+   *IEEE TPAMI* 2019. arXiv:1705.09406. — fusion/co-learning taxonomy.
+8. C. Guo, G. Pleiss, Y. Sun, K. Q. Weinberger. "On Calibration of Modern Neural Networks."
+   *ICML* 2017. arXiv:1706.04599. — ECE/calibration.
+9. D. B. Rubin. "Inference and Missing Data." *Biometrika* 63(3), 1976. — MCAR/MAR/MNAR.
+10. B. Kim, Y.-S. Jeong, S. H. Tong, I.-K. Chang, M.-K. Jeong. "A Regularized SVD-based Approach for
+    Failure Pattern Classification on Fail Bit Map in a DRAM Wafer." *IEEE Trans. Semiconductor
+    Manufacturing* 28(1), 2015. — FBM 불량 패턴 도메인(이미지 패턴 참고용).

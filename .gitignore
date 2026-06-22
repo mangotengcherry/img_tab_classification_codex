@@ -7,3 +7,8 @@ __pycache__/
 venv/
 dist/
 build/
+
+# local scratch
+tmp/
+# copyrighted reference papers — kept locally, not redistributed
+papers/

@@ -25,7 +25,6 @@ import numpy as np
 import pandas as pd
 
 from fbm_multimodal.fusion.data import generate_dataset
-from fbm_multimodal.fusion.fbm_patterns import image_feature_matrix
 from fbm_multimodal.fusion.fusion_eval import evaluate_fusion, modality_contribution
 from fbm_multimodal.fusion.model import FusionMLP
 from fbm_multimodal.fusion.visualize import generate_all_figures
@@ -36,12 +35,11 @@ FIGURES = REPORTS / "figures"
 
 
 def _features(images: np.ndarray) -> np.ndarray:
-    """Paper-grounded image features (Kim et al. 2015, RSVD).
-
-    Concatenates the normalized graded FBM, the binarized (grade>=3) structure
-    channel, and the first-16 eigen-image norms of the binarized map.
-    """
-    return image_feature_matrix(images, pool=2, k_eigen=16)
+    """Normalized graded FBM, 2x2 average-pooled and flattened."""
+    n, h, w = images.shape
+    h2, w2 = h // 2, w // 2
+    pooled = images[:, : h2 * 2, : w2 * 2].reshape(n, h2, 2, w2, 2).mean(axis=(2, 4))
+    return (pooled / 8.0).reshape(n, -1)
 
 
 def main() -> None:

@@ -202,8 +202,8 @@ product KPI `0.65`를 만족하려면, single subset accuracy가 `0.8`인 condit
 - **Loss masking** — synthetic(이미지만) 샘플은 image head만, real 샘플만 tabular/fusion head를 학습.
 - **Modality dropout** — fusion이 (synthetic으로 풍부한) image 쪽으로 collapse하지 못하게 강제.
 - 세 head(image-only / tabular-only / fusion)를 동시에 평가하고 collapse·정체성 슬라이스를 진단.
-- **도메인 패턴 진단** — FBM 논문에서 쓰인 관점처럼 grade 3 이상만 남긴 이진화 화면과
-  랜덤/세로선/가로선/block stress pattern을 함께 확인.
+- **도메인 패턴 진단** — 랜덤 점, 세로선, 가로선, block, edge ring 같은 FBM 패턴 예시를
+  synthetic generator와 시각화로 확인.
 
 ### 실행
 
@@ -227,24 +227,23 @@ loader로 교체하면 됩니다(컬럼 형식은 quickstart 참고). 같은 예
 
 | head | single acc | composite acc | **KPI product** |
 |---|---|---|---|
-| image_only | 0.678 | 0.517 | 0.350 |
-| tabular_only | 1.000 | 0.567 | 0.567 |
-| **fusion** | **0.983** | **0.983** | **0.967** |
+| image_only | 0.700 | 0.533 | 0.373 |
+| tabular_only | 1.000 | 0.517 | 0.517 |
+| **fusion** | **0.972** | **0.983** | **0.956** |
 
-fusion KPI **0.967** ≫ best unimodal **0.567** (gain **+0.400**). 정체성 클래스(이미지로 동일)에서
-tabular가 image를 **+0.455** 앞서고, 진짜 ablation에서 tabular 기여 **+0.446** → fusion이 tabular를
+fusion KPI **0.956** ≫ best unimodal **0.517** (gain **+0.439**). 정체성 클래스(이미지로 동일)에서
+tabular가 image를 **+0.447** 앞서고, 진짜 ablation에서 tabular 기여 **+0.529** → fusion이 tabular를
 실제로 사용(collapse 아님).
 
 ![dataset](reports/figures/01_dataset_overview.png)
 ![pattern gallery](reports/figures/06_pattern_gallery.png)
-![binarized pattern gallery](reports/figures/07_binarized_pattern_gallery.png)
-![paper pattern stress gallery](reports/figures/08_paper_pattern_stress_gallery.png)
+![domain pattern stress gallery](reports/figures/07_domain_pattern_stress_gallery.png)
 ![kpi](reports/figures/04_kpi_product.png)
 ![identity & collapse](reports/figures/05_identity_and_collapse.png)
 
 참고 논문에서 말하는 `single-bit / non-single-bit`는 여기서의 `단일 label / 중첩 label`과
-완전히 같은 뜻은 아닙니다. 이 repo에서는 논문 아이디어를 모델 교체보다 **고강도 grade 패턴을
-쉽게 확인하는 진단 시각화**로 먼저 반영했습니다.
+완전히 같은 뜻은 아닙니다. 이 repo에서는 논문 방법을 따라가기보다, **이미지 패턴의 모양을 더
+현실적으로 만들고 팀원이 쉽게 확인하는 용도**로만 반영했습니다.
 
 ## Measurement Map
 

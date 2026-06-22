@@ -2,18 +2,9 @@ from itertools import combinations
 
 import numpy as np
 
-from fbm_multimodal.fusion.data import binarize_fbm_grades, generate_dataset
-from fbm_multimodal.fusion.fbm_patterns import (
-    IMAGE_SHAPE,
-    effective_rank,
-    image_feature_matrix,
-)
+from fbm_multimodal.fusion.data import generate_dataset
 from fbm_multimodal.fusion.model import FusionMLP
-from fbm_multimodal.fusion.visualize import (
-    plot_binarized_pattern_gallery,
-    plot_paper_pattern_stress_gallery,
-    plot_pattern_gallery,
-)
+from fbm_multimodal.fusion.visualize import plot_domain_pattern_stress_gallery, plot_pattern_gallery
 
 
 def _toy(seed: int = 0):
@@ -112,67 +103,8 @@ def test_pattern_gallery_visualization_is_written(tmp_path):
     assert out.stat().st_size > 0
 
 
-def test_binarize_fbm_grades_uses_grade_three_threshold():
-    grades = np.array([[0.0, 2.99, 3.0, 8.0]])
-
-    binary = binarize_fbm_grades(grades)
-
-    assert binary.tolist() == [[0, 0, 1, 1]]
-
-
-def test_binarized_pattern_gallery_visualization_is_written(tmp_path):
-    ds = generate_dataset(
-        seed=5,
-        n_real_single_train=16,
-        n_real_composite_train=6,
-        n_synth_composite_train=6,
-        n_real_single_test=8,
-        n_real_composite_test=6,
-        n_synth_composite_test=6,
-    )
-    out = plot_binarized_pattern_gallery(ds, tmp_path / "binarized_pattern_gallery.png")
+def test_domain_pattern_stress_gallery_visualization_is_written(tmp_path):
+    out = plot_domain_pattern_stress_gallery(tmp_path / "domain_pattern_stress_gallery.png")
 
     assert out.exists()
     assert out.stat().st_size > 0
-
-
-def test_paper_pattern_stress_gallery_visualization_is_written(tmp_path):
-    out = plot_paper_pattern_stress_gallery(tmp_path / "paper_pattern_stress_gallery.png")
-
-    assert out.exists()
-    assert out.stat().st_size > 0
-
-
-def test_structured_line_has_lower_effective_rank_than_random_scatter():
-    rng = np.random.default_rng(0)
-    h, w = IMAGE_SHAPE
-    line = np.zeros(IMAGE_SHAPE, dtype=float)
-    line[:, w // 2] = 1.0
-
-    scatter = np.zeros(IMAGE_SHAPE, dtype=float)
-    rows = rng.integers(0, h, size=600)
-    cols = rng.integers(0, w, size=600)
-    scatter[rows, cols] = 1.0
-
-    assert effective_rank(line) == 1
-    assert effective_rank(scatter) > effective_rank(line)
-
-
-def test_image_feature_matrix_adds_binary_and_global_structure_features():
-    images = np.zeros((2, *IMAGE_SHAPE), dtype=float)
-    images[0, :, IMAGE_SHAPE[1] // 2] = 6.0
-    images[1, 20:40, 10:20] = 6.5
-
-    features = image_feature_matrix(images, pool=2, k_eigen=8)
-
-    pooled_size = (IMAGE_SHAPE[0] // 2) * (IMAGE_SHAPE[1] // 2)
-    assert features.shape == (2, pooled_size * 2 + 8)
-    assert np.isfinite(features).all()
-
-
-def test_image_feature_matrix_is_finite_for_generated_dataset():
-    ds = generate_dataset(seed=0)
-
-    features = image_feature_matrix(ds.images, pool=2, k_eigen=16)
-
-    assert np.isfinite(features).all()

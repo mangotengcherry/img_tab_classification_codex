@@ -27,8 +27,6 @@ from itertools import combinations
 import numpy as np
 
 from fbm_multimodal.fusion.fbm_patterns import (
-    BINARIZE_THRESHOLD,
-    binarize_fbm,
     paint_cluster,
     paint_edge_ring,
     paint_single_bit_scatter,
@@ -68,18 +66,13 @@ class FusionDataset:
         return self.images.reshape(self.images.shape[0], -1)
 
 
-def binarize_fbm_grades(image: np.ndarray, threshold: float = BINARIZE_THRESHOLD) -> np.ndarray:
-    """Return 1 where FBM grade is high enough to be treated as a pattern signal."""
-    return binarize_fbm(image, threshold=threshold).astype(int)
-
-
 def _image_for(active: list[int], rng: np.random.Generator) -> np.ndarray:
-    """Render an FBM grade image using literature-grounded failure patterns.
+    """Render an FBM grade image using realistic defect shapes (domain only).
 
-    Structured non-single-bit patterns (edge ring, cluster, vertical line) are
-    HIGH grade (>=3, survive binarization); a random LOW-grade single-bit scatter
-    is always added as background (paper: single-bit = random, low grade). See
-    fbm_patterns.py / docs/fbm_domain_notes.md.
+    Structured defects (edge ring, cluster, vertical line) are HIGH grade; a
+    random LOW-grade single-bit scatter is added as realistic background. These
+    shapes mirror how real FBM failures look (see docs/fbm_domain_notes.md); the
+    model itself just consumes the graded image.
     """
     h, w = IMAGE_SHAPE
     img = rng.uniform(0.0, 0.4, size=(h, w))   # faint analog background

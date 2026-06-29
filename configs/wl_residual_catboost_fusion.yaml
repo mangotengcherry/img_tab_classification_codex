@@ -1,0 +1,73 @@
+wl_map:
+  enabled: true
+  wl_min: 0
+  wl_max: 200
+  num_wl_bins: 20
+  test_methods: null
+  sample_id_column: sample_id
+  test_method_column: test_method
+  wl_column: wordline
+  value_column: value
+  baseline:
+    fit_scope: train_real_only
+    center: median
+    scale: iqr
+    residual_direction: high_side
+    eps: 1.0e-6
+    clip_max: 10.0
+  channels:
+    - mean_residual
+    - max_residual
+    - std_residual
+    - observed_mask
+    - count_ratio
+    - source_count_norm
+
+synthetic_wl:
+  enabled: true
+  operator: max_residual
+  mask_policy: union
+  add_source_count: true
+  source_count_normalize: true
+  default_loss_weight: 0.2
+  max_loss_weight: 0.3
+  use_for_wl_head: true
+  use_for_fusion_head: true
+
+catboost_logit_branch:
+  enabled: true
+  input: raw_tabular_417
+  task: multi_label_ovr
+  num_folds: 5
+  use_oof_for_train: true
+  use_fold_ensemble_for_valid_test: true
+  random_seed: 42
+  output_dir: outputs/catboost_logits
+
+fusion:
+  type: classwise_gated_residual
+  use_fbm: true
+  use_wl_map: true
+  use_catboost_logits: true
+
+loss_weights:
+  fbm: 1.0
+  wl_real: 1.0
+  wl_synthetic: 0.2
+  fusion_real: 1.0
+  fusion_synthetic: 0.2
+
+pseudo_labeling:
+  enabled: false
+  strategy: pairwise_topk
+  top_k_per_pair: 30
+  min_pair_score: 0.7
+
+evaluation:
+  official_groups:
+    - real_single
+    - real_composite
+    - real_all
+  synthetic_as_auxiliary_only: true
+  compute_fusion_gain: true
+  support_warning_threshold: 30

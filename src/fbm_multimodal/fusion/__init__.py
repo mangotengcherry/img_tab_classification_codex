@@ -18,17 +18,24 @@ See ``docs/multimodal_fusion_guide.md`` and ``docs/fusion_eval_quickstart.md``.
 """
 
 from fbm_multimodal.fusion.fusion_eval import (
+    DEFAULT_REAL_ALL_GROUP,
     FusionEvalReport,
     HEAD_PROB_PREFIXES,
     evaluate_fusion,
     modality_contribution,
+    run_leakage_checks,
     wilson_ci,
 )
+from fbm_multimodal.fusion.model import ClasswiseGatedResidualFusion, WLResidualCatBoostFusionMLP
 
 __all__ = [
+    "ClasswiseGatedResidualFusion",
+    "DEFAULT_REAL_ALL_GROUP",
     "FusionEvalReport",
     "HEAD_PROB_PREFIXES",
+    "WLResidualCatBoostFusionMLP",
     "evaluate_fusion",
     "modality_contribution",
+    "run_leakage_checks",
     "wilson_ci",
 ]

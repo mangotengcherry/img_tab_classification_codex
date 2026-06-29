@@ -199,6 +199,8 @@ product KPI `0.65`를 만족하려면, single subset accuracy가 `0.8`인 condit
 - **Loss masking** — synthetic(이미지만) 샘플은 image head만, real 샘플만 tabular/fusion head를 학습.
 - **Modality dropout** — fusion이 (synthetic으로 풍부한) image 쪽으로 collapse하지 못하게 강제.
 - 세 head(image-only / tabular-only / fusion)를 동시에 평가하고 collapse·정체성 슬라이스를 진단.
+- WL residual map + CatBoost OOF logit branch 확장 가이드:
+  [docs/wl_residual_catboost_fusion.md](docs/wl_residual_catboost_fusion.md)
 
 ### 실행
 

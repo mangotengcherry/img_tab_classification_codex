@@ -62,6 +62,7 @@ HEAD_PROB_PREFIXES: dict[str, str] = {
 DEFAULT_SINGLE_GROUP = "real_single"
 DEFAULT_COMPOSITE_GROUP = "real_composite"
 DEFAULT_SYNTHETIC_GROUP = "synthetic_composite"
+DEFAULT_REAL_ALL_GROUP = "real_all"
 
 
 def wilson_ci(successes: int, total: int, z: float = 1.96) -> tuple[float, float]:
@@ -182,14 +183,25 @@ def evaluate_fusion(
     warnings: list[str] = []
 
     # ---- per head x per group subset accuracy ----------------------------
-    all_groups = [single_group, composite_group, synthetic_group]
+    all_groups = [single_group, composite_group, DEFAULT_REAL_ALL_GROUP, synthetic_group]
     present_groups = [g for g in all_groups if (groups == g).any()]
+    if (groups == single_group).any() or (groups == composite_group).any():
+        present_groups = [g for g in present_groups if g != DEFAULT_REAL_ALL_GROUP]
+        insert_at = 0
+        if single_group in present_groups:
+            insert_at = present_groups.index(single_group) + 1
+        if composite_group in present_groups:
+            insert_at = present_groups.index(composite_group) + 1
+        present_groups.insert(insert_at, DEFAULT_REAL_ALL_GROUP)
     head_group_accuracy: dict[str, dict[str, SubsetResult]] = {}
     for head in heads_present:
         pred, avail = head_pred[head]
         per_group: dict[str, SubsetResult] = {}
         for group in present_groups:
-            mask = (groups == group) & avail
+            if group == DEFAULT_REAL_ALL_GROUP:
+                mask = np.isin(groups, np.array([single_group, composite_group], dtype=object)) & avail
+            else:
+                mask = (groups == group) & avail
             per_group[group] = _subset_result(true[mask], pred[mask])
         head_group_accuracy[head] = per_group
 
@@ -307,6 +319,52 @@ def modality_contribution(
         "tabular_contribution": base_acc - ablated_acc,
         "n": float(len(y_true)),
     }
+
+
+def run_leakage_checks(
+    predictions: pd.DataFrame,
+    *,
+    tensorizer_fit_sample_ids: set[str] | None = None,
+    train_real_sample_ids: set[str] | None = None,
+    catboost_metadata: dict[str, object] | None = None,
+    pseudo_labeling_enabled: bool = False,
+    group_column: str = "eval_group",
+    synthetic_column: str = "is_synthetic",
+    official_groups: Sequence[str] = (DEFAULT_SINGLE_GROUP, DEFAULT_COMPOSITE_GROUP),
+) -> list[str]:
+    """Return warnings for common leakage risks in WL/CatBoost fusion runs."""
+    warnings_out: list[str] = []
+
+    if tensorizer_fit_sample_ids is not None and train_real_sample_ids is not None:
+        leaked = set(tensorizer_fit_sample_ids) - set(train_real_sample_ids)
+        if leaked:
+            preview = ", ".join(sorted(leaked)[:5])
+            warnings_out.append(
+                f"WL baseline fit includes {len(leaked)} samples outside train_real_sample_ids: {preview}"
+            )
+
+    metadata = catboost_metadata or {}
+    train_prediction_mode = str(metadata.get("train_prediction_mode", "oof")).lower()
+    if train_prediction_mode != "oof":
+        warnings_out.append(
+            f"CatBoost train logits must be OOF, got train_prediction_mode={train_prediction_mode!r}"
+        )
+    if metadata.get("synthetic_excluded") is False:
+        warnings_out.append("Synthetic samples are not excluded from CatBoost training metadata")
+
+    if pseudo_labeling_enabled:
+        warnings_out.append("Pseudo-labeling is enabled; default production config should keep it disabled")
+
+    if group_column in predictions.columns and synthetic_column in predictions.columns:
+        official_mask = predictions[group_column].astype(str).isin(list(official_groups))
+        synthetic_mask = predictions[synthetic_column].astype(bool)
+        n_bad = int((official_mask & synthetic_mask).sum())
+        if n_bad:
+            warnings_out.append(
+                f"{n_bad} synthetic rows are marked as official metric groups; synthetic samples must be auxiliary only"
+            )
+
+    return warnings_out
 
 
 # --------------------------------------------------------------------------

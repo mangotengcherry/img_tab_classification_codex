@@ -1,7 +1,7 @@
 import numpy as np
 
-from fbm_multimodal.fusion.data import generate_dataset
-from fbm_multimodal.fusion.model import FusionMLP
+from fbm_multimodal.fusion.data import DEFAULT_WL_CHANNELS, FusionDataset, generate_dataset
+from fbm_multimodal.fusion.model import ClasswiseGatedResidualFusion, FusionMLP, WLResidualCatBoostFusionMLP
 
 
 def _toy(seed: int = 0):
@@ -60,3 +60,97 @@ def test_generated_dataset_shapes_and_asymmetry():
     # real rows must HAVE tabular
     real = np.isin(ds.eval_group, np.array(["real_single", "real_composite"]))
     assert not np.isnan(ds.tabular[real]).any()
+
+
+def test_dataset_uses_explicit_wl_and_catboost_masks_when_values_are_zero_filled():
+    images = np.zeros((2, 2, 2), dtype=float)
+    tabular = np.full((2, 3), np.nan)
+    labels = np.zeros((2, 2), dtype=int)
+    wl_maps = np.zeros((2, len(DEFAULT_WL_CHANNELS), 2, 1), dtype=float)
+    observed_idx = DEFAULT_WL_CHANNELS.index("observed_mask")
+    wl_maps[0, observed_idx, 0, 0] = 1.0
+    catboost_logits = np.zeros((2, 2), dtype=float)
+
+    ds = FusionDataset(
+        images=images,
+        tabular=tabular,
+        labels=labels,
+        eval_group=np.array(["real_single", "synthetic_composite"]),
+        chip_id=["real", "synthetic"],
+        split=np.array(["train", "train"]),
+        label_names=["a", "b"],
+        identity_labels=[],
+        wl_maps=wl_maps,
+        catboost_logits=catboost_logits,
+        has_catboost_logits_array=np.array([1.0, 0.0]),
+    )
+
+    np.testing.assert_array_equal(ds.has_wl_map, np.array([True, False]))
+    np.testing.assert_array_equal(ds.has_catboost_logits, np.array([True, False]))
+    np.testing.assert_array_equal(ds.is_synthetic, np.array([False, True]))
+    assert ds.sample_type.tolist() == ["real_single", "synthetic_composite"]
+
+
+def test_classwise_gated_residual_fusion_respects_modality_masks():
+    fusion = ClasswiseGatedResidualFusion(
+        num_classes=2,
+        wl_gates=np.array([0.5, 2.0]),
+        catboost_gates=np.array([1.0, 0.25]),
+    )
+    fbm_logits = np.array([[1.0, 1.0], [1.0, 1.0]])
+    wl_logits = np.array([[2.0, 3.0], [10.0, 10.0]])
+    catboost_logits = np.array([[4.0, 8.0], [4.0, 8.0]])
+
+    combined = fusion.combine_logits(
+        fbm_logits,
+        wl_logits=wl_logits,
+        has_wl_map=np.array([1.0, 0.0]),
+        catboost_logits=catboost_logits,
+        has_catboost_logits=np.array([1.0, 1.0]),
+    )
+
+    np.testing.assert_allclose(combined[0], [6.0, 9.0])
+    np.testing.assert_allclose(combined[1], [5.0, 3.0])
+
+
+def test_wl_residual_catboost_model_trains_and_masks_unavailable_fusion_rows():
+    rng = np.random.default_rng(11)
+    n = 120
+    y = rng.integers(0, 2, size=(n, 2))
+    images = np.zeros((n, 4), dtype=float)
+    images[:, 0] = y[:, 0] * 4.0 + rng.normal(0, 0.2, n)
+    wl_maps = np.zeros((n, 1, 2, 1), dtype=float)
+    wl_maps[:, 0, 0, 0] = y[:, 1] * 4.0 + rng.normal(0, 0.2, n)
+    has_wl = np.ones(n, dtype=float)
+    has_wl[:10] = 0.0
+    wl_loss_weight = has_wl.copy()
+    catboost_logits = np.zeros((n, 2), dtype=float)
+    catboost_logits[:, 1] = np.where(y[:, 1] == 1, 2.0, -2.0)
+    has_cat = np.ones(n, dtype=float)
+    has_cat[10:20] = 0.0
+    has_wl[:5] = 0.0
+    has_cat[:5] = 0.0
+
+    model = WLResidualCatBoostFusionMLP(hidden=12, lr=5e-3, epochs=140, seed=3)
+    model.fit(
+        images,
+        wl_maps,
+        y,
+        has_wl_map=has_wl,
+        wl_loss_weight=wl_loss_weight,
+        catboost_logits=catboost_logits,
+        has_catboost_logits=has_cat,
+    )
+
+    assert model.history["loss_total"][-1] < model.history["loss_total"][0]
+    heads = model.predict_heads(
+        images,
+        wl_maps,
+        has_wl_map=has_wl,
+        catboost_logits=catboost_logits,
+        has_catboost_logits=has_cat,
+    )
+    assert np.isnan(heads["fusion"][:5]).all()
+    assert not np.isnan(heads["fusion"][20:]).any()
+    fusion_pred = (heads["fusion"][20:] >= 0.5).astype(int)
+    assert (fusion_pred == y[20:]).all(axis=1).mean() > 0.8

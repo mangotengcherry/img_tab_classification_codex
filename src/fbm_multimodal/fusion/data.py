@@ -25,12 +25,15 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from fbm_multimodal.wl_residual_map import DEFAULT_WL_CHANNELS
+
 
 IMAGE_SHAPE = (128, 46)
 LABELS = ["edge_ring", "center_blob", "leak_top", "leak_bottom"]
 IDENTITY_LABELS = ["leak_top", "leak_bottom"]
 N_TABULAR = 201  # MSR_000 .. MSR_200
 MAX_GRADE = 8.0
+DEFAULT_SYNTHETIC_WL_LOSS_WEIGHT = 0.2
 
 # tabular region slices (in reality this comes from measurement_map.csv)
 _TOP = slice(0, 67)
@@ -48,10 +51,71 @@ class FusionDataset:
     split: np.ndarray           # (N,) str  'train' | 'test'
     label_names: list[str]
     identity_labels: list[str]
+    wl_maps: np.ndarray | None = None          # optional (N, C, B, T)
+    wl_channel_names: list[str] | None = None
+    has_wl_map_array: np.ndarray | None = None
+    wl_is_synthetic_array: np.ndarray | None = None
+    wl_loss_weight_array: np.ndarray | None = None
+    catboost_logits: np.ndarray | None = None  # optional (N, n_labels)
+    has_catboost_logits_array: np.ndarray | None = None
+    is_synthetic_array: np.ndarray | None = None
 
     @property
     def has_tabular(self) -> np.ndarray:
         return ~np.isnan(self.tabular).all(axis=1)
+
+    @property
+    def has_wl_map(self) -> np.ndarray:
+        if self.has_wl_map_array is not None:
+            return np.asarray(self.has_wl_map_array, dtype=bool)
+        if self.wl_maps is None:
+            return np.zeros(self.images.shape[0], dtype=bool)
+        maps = np.asarray(self.wl_maps, dtype=float)
+        if maps.shape[0] != self.images.shape[0]:
+            raise ValueError("wl_maps row count must match images")
+        channel_names = self.wl_channel_names
+        if channel_names is None and maps.ndim == 4 and maps.shape[1] == len(DEFAULT_WL_CHANNELS):
+            channel_names = list(DEFAULT_WL_CHANNELS)
+        if channel_names and "observed_mask" in channel_names:
+            observed_idx = channel_names.index("observed_mask")
+            observed = np.nan_to_num(maps[:, observed_idx], nan=0.0)
+            return observed.reshape(observed.shape[0], -1).any(axis=1)
+        return ~np.isnan(maps).reshape(maps.shape[0], -1).all(axis=1)
+
+    @property
+    def wl_is_synthetic(self) -> np.ndarray:
+        if self.wl_is_synthetic_array is None:
+            return np.zeros(self.images.shape[0], dtype=float)
+        return np.asarray(self.wl_is_synthetic_array, dtype=float)
+
+    @property
+    def wl_loss_weight(self) -> np.ndarray:
+        if self.wl_loss_weight_array is not None:
+            return np.asarray(self.wl_loss_weight_array, dtype=float)
+        return np.where(
+            self.has_wl_map,
+            np.where(self.wl_is_synthetic.astype(bool), DEFAULT_SYNTHETIC_WL_LOSS_WEIGHT, 1.0),
+            0.0,
+        ).astype(float)
+
+    @property
+    def has_catboost_logits(self) -> np.ndarray:
+        if self.has_catboost_logits_array is not None:
+            return np.asarray(self.has_catboost_logits_array, dtype=bool)
+        if self.catboost_logits is None:
+            return np.zeros(self.images.shape[0], dtype=bool)
+        logits = np.asarray(self.catboost_logits, dtype=float)
+        return ~np.isnan(logits).all(axis=1)
+
+    @property
+    def is_synthetic(self) -> np.ndarray:
+        if self.is_synthetic_array is not None:
+            return np.asarray(self.is_synthetic_array, dtype=bool)
+        return np.char.startswith(self.eval_group.astype(str), "synthetic")
+
+    @property
+    def sample_type(self) -> np.ndarray:
+        return self.eval_group.astype(str)
 
     @property
     def images_flat(self) -> np.ndarray:

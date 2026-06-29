@@ -17,6 +17,7 @@ dependencies = [
 [project.optional-dependencies]
 test = ["pytest"]
 viz = ["matplotlib"]
+catboost = ["catboost"]
 
 [project.scripts]
 fbm-mm = "fbm_multimodal.cli:main"

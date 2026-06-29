@@ -4,6 +4,7 @@ import pandas as pd
 from fbm_multimodal.fusion.fusion_eval import (
     evaluate_fusion,
     modality_contribution,
+    run_leakage_checks,
     wilson_ci,
 )
 
@@ -59,6 +60,22 @@ def test_kpi_product_is_single_times_composite_per_head():
     assert kpi["single_acc"] == 1.0
     assert kpi["composite_acc"] == 0.5
     assert kpi["kpi_product"] == 0.5
+
+
+def test_real_all_group_combines_real_single_and_real_composite_only():
+    rows = [
+        {"eval_group": "real_single", "true_a": 1, "true_b": 0,
+         "fusion_prob_a": 0.9, "fusion_prob_b": 0.1},
+        {"eval_group": "real_composite", "true_a": 1, "true_b": 1,
+         "fusion_prob_a": 0.9, "fusion_prob_b": 0.9},
+        {"eval_group": "synthetic_composite", "true_a": 1, "true_b": 1,
+         "fusion_prob_a": 0.1, "fusion_prob_b": 0.1},
+    ]
+    report = evaluate_fusion(_frame(rows), labels=["a", "b"])
+
+    assert report.head_group_accuracy["fusion"]["real_all"].support == 2
+    assert report.head_group_accuracy["fusion"]["real_all"].accuracy == 1.0
+    assert report.head_group_accuracy["fusion"]["synthetic_composite"].support == 1
 
 
 def test_fusion_prob_alias_accepts_bare_prob_columns():
@@ -124,3 +141,27 @@ def test_modality_contribution_measures_tabular_drop():
     assert out["subset_acc_with_tabular"] == 1.0
     assert out["subset_acc_tabular_ablated"] == 0.0
     assert out["tabular_contribution"] == 1.0
+
+
+def test_leakage_checks_flag_common_wl_catboost_and_pseudo_label_risks():
+    predictions = pd.DataFrame(
+        {
+            "sample_id": ["syn-as-real"],
+            "eval_group": ["real_composite"],
+            "is_synthetic": [True],
+        }
+    )
+
+    warnings = run_leakage_checks(
+        predictions,
+        tensorizer_fit_sample_ids={"train-a", "valid-leak"},
+        train_real_sample_ids={"train-a"},
+        catboost_metadata={"train_prediction_mode": "in_fold", "synthetic_excluded": False},
+        pseudo_labeling_enabled=True,
+    )
+
+    assert any("WL baseline" in warning for warning in warnings)
+    assert any("CatBoost train logits" in warning for warning in warnings)
+    assert any("Synthetic samples are not excluded" in warning for warning in warnings)
+    assert any("Pseudo-labeling is enabled" in warning for warning in warnings)
+    assert any("official metric" in warning for warning in warnings)

@@ -18,6 +18,13 @@ from fbm_multimodal.condition_eval import (
     render_condition_report,
     summarize_condition_report,
 )
+from fbm_multimodal.eds_mapping import (
+    catboost_feature_columns,
+    read_eds_table,
+    validate_eds_wordline_map,
+    wide_eds_to_wl_measurements,
+    write_table,
+)
 from fbm_multimodal.measurement import MeasurementMap
 
 
@@ -26,6 +33,10 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.command == "validate-map":
         return _validate_map(args)
+    if args.command == "validate-eds-map":
+        return _validate_eds_map(args)
+    if args.command == "build-wl-measurements":
+        return _build_wl_measurements(args)
     if args.command == "rank-unlabeled":
         return _rank_unlabeled(args)
     if args.command == "evaluate-conditions":
@@ -44,6 +55,22 @@ def _build_parser() -> argparse.ArgumentParser:
     validate = subparsers.add_parser("validate-map", help="Report measurement_map.csv feature coverage.")
     validate.add_argument("--manifest", required=True, help="Chip manifest CSV containing MSR_* columns.")
     validate.add_argument("--measurement-map", required=True, help="Measurement mapping CSV.")
+
+    validate_eds = subparsers.add_parser(
+        "validate-eds-map",
+        help="Validate simplified EDS feature -> wordline mapping table.",
+    )
+    validate_eds.add_argument("--eds", required=True, help="EDS tabular CSV or parquet.")
+    validate_eds.add_argument("--mapping", required=True, help="EDS mapping CSV.")
+    validate_eds.add_argument("--label-columns", default="", help="Optional comma-separated label columns.")
+
+    build_wl = subparsers.add_parser(
+        "build-wl-measurements",
+        help="Convert wide EDS tabular data to long-form WL measurement rows.",
+    )
+    build_wl.add_argument("--eds", required=True, help="EDS tabular CSV or parquet.")
+    build_wl.add_argument("--mapping", required=True, help="EDS mapping CSV.")
+    build_wl.add_argument("--output", required=True, help="Output CSV or parquet path.")
 
     rank = subparsers.add_parser("rank-unlabeled", help="Rank unlabeled chips for engineer review.")
     rank.add_argument("--candidates", required=True, help="Candidate predictions CSV.")
@@ -106,6 +133,40 @@ def _validate_map(args: argparse.Namespace) -> int:
         "mapped_features": coverage.mapped_features,
         "coverage_ratio": coverage.coverage_ratio,
         "missing_features": coverage.missing_features,
+    }
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0
+
+
+def _validate_eds_map(args: argparse.Namespace) -> int:
+    eds = read_eds_table(args.eds)
+    mapping = pd.read_csv(args.mapping)
+    validated = validate_eds_wordline_map(mapping, eds.columns.tolist())
+    catboost_columns = catboost_feature_columns(
+        eds,
+        validated,
+        label_columns=_split_csv_arg(args.label_columns),
+    )
+    payload = {
+        "mapped_features": int(len(validated)),
+        "wl_map_features": int(validated["include_in_wl_map"].sum()),
+        "catboost_features": int(len(catboost_columns)),
+        "low_bad_features": int((validated["value_direction"] == "low_bad").sum()),
+        "missing_features": [],
+    }
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0
+
+
+def _build_wl_measurements(args: argparse.Namespace) -> int:
+    eds = read_eds_table(args.eds)
+    mapping = pd.read_csv(args.mapping)
+    measurements = wide_eds_to_wl_measurements(eds, mapping)
+    output_path = write_table(measurements, args.output)
+    payload = {
+        "rows": int(len(measurements)),
+        "samples": int(measurements["sample_id"].nunique()) if not measurements.empty else 0,
+        "output": str(output_path),
     }
     print(json.dumps(payload, ensure_ascii=False, indent=2))
     return 0

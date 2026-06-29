@@ -29,3 +29,19 @@ data/
 - label column은 FBM manifest와 EDS tabular에서 같은 이름을 사용합니다.
 - EDS test item -> WL 위치 매핑은 `data/metadata/eds_test_item_wordline_map.csv`에 한 row per EDS feature column으로 작성합니다.
 - validation/test row는 WL residual baseline median/IQR 계산에 절대 사용하지 않습니다.
+
+첫 smoke test:
+
+```bash
+PYTHONPATH=src python3 -m fbm_multimodal.cli validate-eds-map \
+  --eds data/raw/eds_tabular/eds_tabular.csv \
+  --mapping data/metadata/eds_test_item_wordline_map.csv \
+  --label-columns label_ERS_0,label_ERS_1
+
+PYTHONPATH=src python3 -m fbm_multimodal.cli build-wl-measurements \
+  --eds data/raw/eds_tabular/eds_tabular.csv \
+  --mapping data/metadata/eds_test_item_wordline_map.csv \
+  --output data/interim/wl_measurements.csv
+```
+
+상세 절차는 `docs/real_dataset_quickstart.md`를 참고합니다.

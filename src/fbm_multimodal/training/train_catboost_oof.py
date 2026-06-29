@@ -251,6 +251,18 @@ def _write_model_artifacts(
                 warnings_out.append(message)
 
 
+def _infer_feature_columns(
+    columns: list[str],
+    *,
+    sample_id_column: str,
+    split_column: str,
+    synthetic_column: str,
+    label_columns: list[str],
+) -> list[str]:
+    excluded = {sample_id_column, split_column, synthetic_column, *label_columns}
+    return [column for column in columns if column not in excluded]
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Train one-vs-rest CatBoost OOF logits.")
     parser.add_argument("--features", required=True, help="CSV with sample_id, split, feature columns.")
@@ -266,10 +278,16 @@ def main(argv: list[str] | None = None) -> int:
 
     features = pd.read_csv(args.features)
     labels = pd.read_csv(args.labels)
-    merged = features.merge(labels, on=args.sample_id_column, how="inner", suffixes=("", "_label"))
     label_columns = [part.strip() for part in args.label_columns.split(",") if part.strip()]
-    metadata_columns = {args.sample_id_column, args.split_column, args.synthetic_column}
-    feature_columns = [column for column in features.columns if column not in metadata_columns]
+    label_frame = labels[[args.sample_id_column, *label_columns]]
+    merged = features.merge(label_frame, on=args.sample_id_column, how="inner", suffixes=("", "_label"))
+    feature_columns = _infer_feature_columns(
+        features.columns.tolist(),
+        sample_id_column=args.sample_id_column,
+        split_column=args.split_column,
+        synthetic_column=args.synthetic_column,
+        label_columns=label_columns,
+    )
 
     result = train_catboost_oof_logits(
         merged[feature_columns],

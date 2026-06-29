@@ -1,6 +1,6 @@
 import numpy as np
 
-from fbm_multimodal.training.train_catboost_oof import train_catboost_oof_logits
+from fbm_multimodal.training.train_catboost_oof import _infer_feature_columns, train_catboost_oof_logits
 
 
 class _MemorizingBinaryEstimator:
@@ -55,3 +55,13 @@ def test_catboost_oof_train_logits_are_out_of_fold_and_exclude_synthetic(tmp_pat
     assert result.metadata["synthetic_excluded"] is True
     assert (tmp_path / "metadata.json").exists()
     assert any((tmp_path / "models").glob("class_*_fold_*.pkl"))
+
+
+def test_catboost_cli_feature_inference_excludes_labels_and_metadata():
+    assert _infer_feature_columns(
+        ["sample_id", "split", "is_synthetic", "label_a", "label_b", "EDS_RD_WL000"],
+        sample_id_column="sample_id",
+        split_column="split",
+        synthetic_column="is_synthetic",
+        label_columns=["label_a", "label_b"],
+    ) == ["EDS_RD_WL000"]

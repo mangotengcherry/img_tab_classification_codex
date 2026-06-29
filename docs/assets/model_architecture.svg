@@ -1,0 +1,132 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="760" viewBox="0 0 1280 760" role="img" aria-labelledby="title desc">
+  <title id="title">FBM, WL residual map, and CatBoost fusion architecture</title>
+  <desc id="desc">Three input branches feed class-wise gated fusion. FBM and WL branches have neural head losses. CatBoost is trained offline and contributes logits without neural loss.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#334155"/>
+    </marker>
+    <style>
+      .title { font: 700 30px Arial, sans-serif; fill: #0f172a; }
+      .subtitle { font: 400 16px Arial, sans-serif; fill: #475569; }
+      .box-title { font: 700 18px Arial, sans-serif; fill: #0f172a; }
+      .box-text { font: 400 14px Arial, sans-serif; fill: #334155; }
+      .small { font: 400 12px Arial, sans-serif; fill: #475569; }
+      .loss { font: 700 15px Arial, sans-serif; fill: #7f1d1d; }
+      .no-loss { font: 700 15px Arial, sans-serif; fill: #475569; }
+      .arrow { stroke: #334155; stroke-width: 2.5; fill: none; marker-end: url(#arrow); }
+      .dashed { stroke: #64748b; stroke-width: 2.5; fill: none; stroke-dasharray: 8 6; marker-end: url(#arrow); }
+      .branch-label { font: 700 15px Arial, sans-serif; fill: #ffffff; }
+    </style>
+  </defs>
+
+  <rect width="1280" height="760" fill="#f8fafc"/>
+  <text x="56" y="58" class="title">FBM + WL Residual Map + CatBoost Fusion</text>
+  <text x="56" y="86" class="subtitle">CatBoost tabular is trained offline on real EDS rows only. Synthetic composite uses FBM and optional synthetic WL residual maps, not synthetic raw tabular rows.</text>
+
+  <!-- Branch labels -->
+  <rect x="56" y="126" width="160" height="30" rx="6" fill="#2563eb"/>
+  <text x="78" y="147" class="branch-label">FBM image branch</text>
+  <rect x="56" y="292" width="178" height="30" rx="6" fill="#059669"/>
+  <text x="78" y="313" class="branch-label">WL residual branch</text>
+  <rect x="56" y="458" width="168" height="30" rx="6" fill="#7c3aed"/>
+  <text x="78" y="479" class="branch-label">CatBoost branch</text>
+
+  <!-- FBM branch -->
+  <rect x="56" y="166" width="210" height="82" rx="8" fill="#dbeafe" stroke="#60a5fa" stroke-width="2"/>
+  <text x="82" y="198" class="box-title">FBM image</text>
+  <text x="82" y="222" class="box-text">image tensor</text>
+
+  <rect x="326" y="166" width="230" height="82" rx="8" fill="#eff6ff" stroke="#60a5fa" stroke-width="2"/>
+  <text x="352" y="198" class="box-title">Image encoder</text>
+  <text x="352" y="222" class="box-text">CNN / image MLP</text>
+
+  <rect x="616" y="166" width="206" height="82" rx="8" fill="#eff6ff" stroke="#60a5fa" stroke-width="2"/>
+  <text x="642" y="198" class="box-title">fbm_logits</text>
+  <text x="642" y="222" class="box-text">per-class logits</text>
+
+  <rect x="902" y="166" width="218" height="82" rx="8" fill="#fee2e2" stroke="#f87171" stroke-width="2"/>
+  <text x="930" y="198" class="loss">FBM head loss</text>
+  <text x="930" y="222" class="box-text">BCEWithLogits</text>
+
+  <!-- WL branch -->
+  <rect x="56" y="332" width="210" height="92" rx="8" fill="#dcfce7" stroke="#34d399" stroke-width="2"/>
+  <text x="82" y="364" class="box-title">WL residual map</text>
+  <text x="82" y="388" class="box-text">[C, WL bin, test method]</text>
+  <text x="82" y="410" class="small">real or synthetic map</text>
+
+  <rect x="326" y="332" width="230" height="92" rx="8" fill="#ecfdf5" stroke="#34d399" stroke-width="2"/>
+  <text x="352" y="364" class="box-title">WL map encoder</text>
+  <text x="352" y="388" class="box-text">profile / location pattern</text>
+  <text x="352" y="410" class="small">synthetic uses low weight</text>
+
+  <rect x="616" y="332" width="206" height="92" rx="8" fill="#ecfdf5" stroke="#34d399" stroke-width="2"/>
+  <text x="642" y="364" class="box-title">wl_logits</text>
+  <text x="642" y="388" class="box-text">per-class logits</text>
+  <text x="642" y="410" class="small">masked by has_wl_map</text>
+
+  <rect x="902" y="332" width="218" height="92" rx="8" fill="#fee2e2" stroke="#f87171" stroke-width="2"/>
+  <text x="930" y="364" class="loss">WL head loss</text>
+  <text x="930" y="388" class="box-text">real weight 1.0</text>
+  <text x="930" y="410" class="box-text">synthetic weight 0.2</text>
+
+  <!-- CatBoost branch -->
+  <rect x="56" y="498" width="210" height="100" rx="8" fill="#ede9fe" stroke="#a78bfa" stroke-width="2"/>
+  <text x="82" y="530" class="box-title">CatBoost tabular</text>
+  <text x="82" y="554" class="box-text">raw EDS scalar features</text>
+  <text x="82" y="576" class="small">real rows only</text>
+
+  <rect x="326" y="498" width="230" height="100" rx="8" fill="#f5f3ff" stroke="#a78bfa" stroke-width="2"/>
+  <text x="352" y="530" class="box-title">Offline CatBoost</text>
+  <text x="352" y="554" class="box-text">OOF train logits</text>
+  <text x="352" y="576" class="box-text">valid/test fold ensemble</text>
+
+  <rect x="616" y="498" width="206" height="100" rx="8" fill="#f5f3ff" stroke="#a78bfa" stroke-width="2"/>
+  <text x="642" y="530" class="box-title">catboost_logits</text>
+  <text x="642" y="554" class="box-text">direct logits input</text>
+  <text x="642" y="576" class="small">masked if unavailable</text>
+
+  <rect x="902" y="498" width="218" height="100" rx="8" fill="#e2e8f0" stroke="#94a3b8" stroke-width="2"/>
+  <text x="930" y="532" class="no-loss">No neural loss</text>
+  <text x="930" y="556" class="box-text">trained separately</text>
+  <text x="930" y="578" class="box-text">feature importance possible</text>
+
+  <!-- Fusion block -->
+  <rect x="902" y="650" width="302" height="74" rx="10" fill="#fff7ed" stroke="#fb923c" stroke-width="2.5"/>
+  <text x="930" y="680" class="box-title">Class-wise gated fusion</text>
+  <text x="930" y="704" class="box-text">fbm + m_wl*g_wl*wl + m_cat*g_cat*cat</text>
+
+  <rect x="616" y="650" width="206" height="74" rx="10" fill="#ffedd5" stroke="#fb923c" stroke-width="2.5"/>
+  <text x="642" y="680" class="box-title">fusion_logits</text>
+  <text x="642" y="704" class="box-text">final prediction logits</text>
+
+  <rect x="326" y="650" width="230" height="74" rx="10" fill="#fee2e2" stroke="#f87171" stroke-width="2"/>
+  <text x="352" y="680" class="loss">Fusion head loss</text>
+  <text x="352" y="704" class="box-text">official metrics: real only</text>
+
+  <!-- Arrows within branches -->
+  <path class="arrow" d="M266 207 H326"/>
+  <path class="arrow" d="M556 207 H616"/>
+  <path class="arrow" d="M822 207 H902"/>
+
+  <path class="arrow" d="M266 378 H326"/>
+  <path class="arrow" d="M556 378 H616"/>
+  <path class="arrow" d="M822 378 H902"/>
+
+  <path class="arrow" d="M266 548 H326"/>
+  <path class="arrow" d="M556 548 H616"/>
+  <path class="arrow" d="M822 548 H902"/>
+
+  <!-- Fusion arrows -->
+  <path class="arrow" d="M719 248 V650"/>
+  <path class="arrow" d="M719 424 V650"/>
+  <path class="dashed" d="M719 598 V650"/>
+  <path class="arrow" d="M902 687 H822"/>
+  <path class="arrow" d="M616 687 H556"/>
+
+  <!-- Notes -->
+  <rect x="56" y="650" width="210" height="74" rx="8" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5"/>
+  <text x="78" y="680" class="box-title">Total neural loss</text>
+  <text x="78" y="704" class="box-text">FBM + WL + Fusion</text>
+
+  <text x="856" y="636" class="small">CatBoost contributes logits, not neural loss</text>
+</svg>

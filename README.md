@@ -2,7 +2,8 @@
 
 이 저장소는 FBM image와 WL/electrical measurement tabular feature를 함께 사용하는 multi-label classification 실험을 위한 경량 도구 모음입니다.
 
-`plan.md`에 정리된 데이터 계약과 평가 유틸리티를 코드로 제공합니다.
+`plan.md`에 정리된 현재 실험 계약과 평가 유틸리티를 코드로 제공합니다. 현재 기준 구조는
+**FBM image + WL high-side residual map + CatBoost OOF logits + class-wise gated residual fusion**입니다.
 
 - `0..8` grade로 표현된 FBM image intensity 정규화
 - `MSR_*` suffix 순서를 물리 위치로 가정하지 않는 measurement mapping 검증
@@ -10,6 +11,7 @@
 - synthetic FBM 합성 모드
 - unlabeled chip review를 위한 active-learning ranking
 - mapping coverage, review candidate 선정, 조건별 성능 평가용 CLI
+- EDS feature-to-WL mapping 검증, long-form WL measurement 생성, WL residual map/CatBoost fusion scaffold
 
 ## 설치
 
@@ -157,7 +159,7 @@ PYTHONPATH=src python3 -m fbm_multimodal.cli evaluate-conditions \
 
 prediction CSV에 기대하는 column은 다음과 같습니다.
 
-- `condition`: `image_only_synth`, `late_fusion`, `mapped_fusion` 같은 실험 조건 이름
+- `condition`: `image_only_synth`, `catboost_logit_fusion`, `wl_residual_catboost_fusion` 같은 실험 조건 이름
 - `chip_id`
 - `eval_group`: `real_single`, `real_composite`, `synthetic_composite` 중 하나
 - 모든 label에 대한 `true_<label>`
@@ -199,6 +201,7 @@ product KPI `0.65`를 만족하려면, single subset accuracy가 `0.8`인 condit
 - **Loss masking** — synthetic(이미지만) 샘플은 image head만, real 샘플만 tabular/fusion head를 학습.
 - **Modality dropout** — fusion이 (synthetic으로 풍부한) image 쪽으로 collapse하지 못하게 강제.
 - 세 head(image-only / tabular-only / fusion)를 동시에 평가하고 collapse·정체성 슬라이스를 진단.
+- **WL residual map + CatBoost logits** — raw tabular row를 합성하지 않고, WL residual map은 낮은 weight로만 합성 보조에 사용.
 - WL residual map + CatBoost OOF logit branch 확장 가이드:
   [docs/wl_residual_catboost_fusion.md](docs/wl_residual_catboost_fusion.md)
 - 실제 FBM tensor + EDS tabular 데이터 교체 quickstart:

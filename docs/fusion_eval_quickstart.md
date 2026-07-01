@@ -4,6 +4,11 @@
 > 3개 head 평가 + fusion gain + collapse 진단 + 정체성 슬라이스를 바로 얻습니다.
 > 개념 배경은 [multimodal_fusion_guide.md](multimodal_fusion_guide.md).
 
+현재 브랜치의 fusion 입력은 FBM, WL residual map, CatBoost logits까지 확장되어 있습니다. 이
+평가기는 prediction CSV 기준으로 동작하므로, 모델 구현이 어떤 branch를 쓰든 최종적으로 아래
+확률 column만 맞추면 됩니다. WL-only/CatBoost-only branch를 별도 비교하려면 condition별 CSV를
+따로 만들거나, branch 확률을 `tabular_prob_*` 역할로 넣어 단일 tabular-side baseline으로 평가하세요.
+
 이 평가기는 core의 `evaluate-conditions`(조건별 KPI gate)와 **충돌하지 않는 별도 모듈**입니다
 (`src/fbm_multimodal/fusion/`). 같은 예측 CSV를 두 평가기에 모두 넣을 수 있습니다.
 
@@ -60,6 +65,9 @@ PYTHONPATH=src python3 -m fbm_multimodal.fusion \
 | `chip_id` | 식별자 | 권장 |
 | `wafer_id` / `lot_id` | grouped 리포트용 | 선택 |
 
+평가기 내부에는 `real_all = real_single + real_composite` aggregate가 자동으로 추가됩니다.
+`real_all`은 official real-only summary이고, synthetic row는 포함하지 않습니다.
+
 ### 핵심 규칙 — 모달리티 비대칭은 **NaN으로 표현**
 
 `synthetic_composite` 행은 tabular가 없으므로 `tabular_prob_*` / `fusion_prob_*`를 **비워둡니다(NaN)**.
@@ -112,6 +120,7 @@ PYTHONPATH=src python3 -m fbm_multimodal.fusion ...                    # fusion 
 ## 5. 리포트 읽는 법
 
 - **Subset accuracy by head × eval_group** — head별·group별 정답률 + Wilson 신뢰구간 / support.
+  `real_single`, `real_composite`, `real_all`, `synthetic_composite`가 분리됩니다.
   composite support가 작으면 CI가 넓게 나옵니다(그게 정상이고, 그래서 같이 봅니다).
 - **KPI product per head** — `single × composite`. fusion이 unimodal보다 높아야 의미가 있습니다.
 - **Fusion gain** — `fusion − best_unimodal`. **0 근처면 fusion이 굳이 필요 없다는 신호.**

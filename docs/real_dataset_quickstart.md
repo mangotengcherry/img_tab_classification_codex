@@ -91,7 +91,44 @@ print(fusion_manifest[["sample_id", "has_fbm_image", "has_eds_tabular", "has_wl_
 PY
 ```
 
-## 5. Full Test Suite
+## 5. WL Residual Tensorizer / Cache
+
+```bash
+PYTHONPATH=src python3 - <<'PY'
+import pandas as pd
+from fbm_multimodal.wl_residual_map import WLResidualMapTensorizer
+
+measurements = pd.read_csv("data/interim/wl_measurements.csv")
+tensorizer = WLResidualMapTensorizer(num_wl_bins=20, clip_max=10.0)
+tensorizer.fit(measurements)
+tensorizer.save("data/interim/wl_residual_tensorizer.json")
+maps = tensorizer.transform(measurements)
+tensorizer.save_tensor_cache(maps, "data/interim/wl_maps.npz")
+print("fit_samples:", len(tensorizer.fit_sample_ids_))
+print("maps:", len(maps))
+PY
+```
+
+`fit()`은 `split`, `eval_group`, `is_synthetic` column이 있으면 train real row만 baseline에 사용합니다.
+
+## 6. CatBoost OOF Logits
+
+```bash
+PYTHONPATH=src python3 -m fbm_multimodal.training.train_catboost_oof \
+  --features data/raw/eds_tabular/eds_tabular.csv \
+  --labels data/raw/eds_tabular/eds_tabular.csv \
+  --label-columns label_ERS_0,label_ERS_1 \
+  --output-dir outputs/catboost_logits \
+  --sample-id-column sample_id \
+  --split-column split \
+  --synthetic-column is_synthetic \
+  --num-folds 5
+```
+
+Train logits는 OOF만 저장되고, validation/test는 fold ensemble 평균으로 생성됩니다. Synthetic row는
+CatBoost training에서 제외됩니다.
+
+## 7. Full Test Suite
 
 ```bash
 PYTHONPATH=src python3 -m pytest -q

@@ -1,145 +1,312 @@
-# FBM Multi-Modal Classification Experiment Plan
+# FBM + WL Residual Map + CatBoost Fusion Experiment Plan
+
+Last updated: 2026-07-01
 
 ## Summary
 
-- 목표는 FBM image와 WL/electrical tabular feature를 함께 사용해 단일 불량, 실제 중첩 불량, 이미지상 유사하지만 전기 특성으로만 구분되는 불량을 안정적으로 분류하는 것이다.
-- 기존 image-only + synthetic composite 학습은 유지하되, synthetic-to-real gap을 별도 지표로 관리한다.
-- `MSR_000` ~ `MSR_200` 번호 순서는 물리 WL 순서로 가정하지 않는다. 별도 mapping table로 feature와 WL/측정조건/물리 위치를 연결한다.
-- 최종 KPI는 `single subset acc * composite subset acc`를 유지하고, 보조 지표로 per-class F1/recall, class-pair subset acc, real-vs-synthetic gap, label cost 대비 성능 상승량을 본다.
-- 목표값 사이에는 수학적 긴장점이 있다. `single=0.8`, `composite=0.6`만 만족하면 product는 `0.48`이므로, product `0.65`를 달성하려면 둘 중 하나가 더 높아야 한다. 예를 들어 single이 `0.8`이면 composite은 최소 `0.8125`가 필요하다.
+이 브랜치의 현재 기준은 기존 FBM fusion 구조를 유지하면서 tabular 경로를 두 갈래로 확장하는 것이다.
 
-## Key Experiments
+- FBM image -> FBM encoder/head
+- WL raw measurement -> train-real-only high-side residual map -> WL map encoder/head
+- raw EDS/tabular scalar features -> one-vs-rest CatBoost -> OOF/fold-ensemble logits
+- FBM logits + WL logits + CatBoost logits -> class-wise gated residual fusion
 
-### E0: Evaluation Frame
+중요한 비목표는 그대로 유지한다.
 
-- split은 1차로 `chip random split`을 사용한다.
-- test set은 `real single`, `real composite`, `synthetic composite`를 분리한다.
-- 모델 선택은 synthetic validation이 아니라 real validation 성능 기준으로 한다.
-- threshold는 `0.5 fixed`, `class-wise threshold`, `class-pair-sensitive threshold`를 비교한다.
-- 조건별 최종 판정은 `condition`, `eval_group`, `true_<label>`, `prob_<label>` 형식의 prediction CSV를 `evaluate-conditions` CLI에 넣어 수행한다.
+- synthetic raw 417-feature tabular row를 만들지 않는다.
+- validation/test로 WL median/IQR baseline을 fit하지 않는다.
+- CatBoost train prediction은 in-fold prediction이 아니라 OOF만 쓴다.
+- pseudo-labeling은 scaffold만 있고 기본값은 off다.
+- official metric에는 synthetic sample을 넣지 않는다.
 
-### E1: Image-Only Baseline
+구현 기준 config는 `configs/wl_residual_catboost_fusion.yaml`, 상세 사용법은
+`docs/wl_residual_catboost_fusion.md`와 `docs/real_dataset_quickstart.md`를 따른다.
 
-- 입력 image는 `128x46`, intensity `0~8`을 `/8` 정규화한다.
-- 기존 CNN, spatial attention CNN, synthetic composite 학습 조건을 재현한다.
-- 좌우 flip은 유지 후보로 둔다.
-- 상하 flip은 물리 위치 의미를 바꿀 수 있으므로, 전기 feature mapping과 함께 뒤집을 수 있는 경우에만 별도 ablation으로 평가한다.
-- synthetic holdout 성능과 real composite 성능 차이를 class-pair별로 기록한다.
+## Current Implementation Map
 
-### E2: Tabular-Only Baseline
+| Area | Current file | Status |
+|---|---|---|
+| WL residual tensorizer | `src/fbm_multimodal/wl_residual_map.py` | implemented |
+| synthetic WL map composer | `src/fbm_multimodal/synthetic_wl_map.py` | implemented |
+| CatBoost OOF logits | `src/fbm_multimodal/training/train_catboost_oof.py` | implemented |
+| pairwise top-K pseudo-label scaffold | `src/fbm_multimodal/pseudo_labeling/pairwise_topk.py` | implemented, default off |
+| fusion dataset masks | `src/fbm_multimodal/fusion/data.py` | implemented |
+| gated residual fusion / numpy model | `src/fbm_multimodal/fusion/model.py` | implemented |
+| fusion evaluation + leakage checks | `src/fbm_multimodal/fusion/fusion_eval.py` | implemented |
+| EDS mapping + WL measurement conversion | `src/fbm_multimodal/eds_mapping.py`, `src/fbm_multimodal/cli.py` | implemented |
+| real FBM/EDS loader smoke path | `src/fbm_multimodal/fusion/real_data.py` | implemented |
+| full real training pipeline | project-specific integration | TODO |
 
-- `MSR_000` ~ `MSR_200`은 단순 순서 feature가 아니라 measurement feature set으로 취급한다.
-- mapping table을 사용해 각 MSR feature에 `wl_index`, `physical_region`, `measurement_condition`, `measurement_type`을 붙인다.
-- baseline은 LightGBM/CatBoost 또는 sklearn one-vs-rest, MLP, metadata-aware MLP, WL-position-aware 1D encoder를 비교한다.
-- 이미지상 유사하지만 LTI/leakage의 상/중/하 위치로 구분되는 class group을 별도 evaluation slice로 둔다.
+## Data Contract
 
-### E3: Multi-Modal Fusion
+### FBM Tensor Dataset
 
-- 1차 추천 구조는 `image encoder + mapped-tabular encoder + fusion head`이다.
-- tabular encoder는 raw MSR 순서를 쓰지 않고, mapping table 기반으로 WL/region/condition embedding을 주입한다.
-- 모델은 `image-only head`, `tabular-only head`, `fusion head`를 함께 출력한다.
-- synthetic image는 image branch와 image auxiliary head 학습에만 사용한다.
-- tabular/fusion head는 real labeled data 중심으로 학습하고, synthetic에는 tabular를 임의 생성하지 않는다.
-- late fusion calibrator도 비교한다: image model logits + tabular model logits + metadata를 입력으로 label별 calibration 모델을 학습한다.
+Recommended local layout:
 
-### E4: Synthetic-to-Real Gap Reduction
+```text
+data/raw/fbm_tensor/
+  fbm_images.npy
+  fbm_manifest.csv
+  label_map.json
+```
 
-- 합성 방식은 `max`, `clipped sum`, `weighted saturating sum`을 비교한다.
-- 현재 사용하는 합성-원본 유사도 threshold는 real composite validation 기준으로 sweep한다.
-- synthetic sample은 real embedding과 가까운 정도에 따라 loss weight를 다르게 주는 실험을 포함한다.
-- 보고서에는 `synthetic composite acc`, `real composite acc`, `gap`을 class-pair별로 기록한다.
+`fbm_manifest.csv` minimum columns:
 
-### E5: Label Cost Reduction
+```csv
+row_idx,sample_id,split,eval_group,label_ERS_0,label_ERS_1
+0,CHIP_000001,train,real_single,1,0
+```
 
-- unlabeled 수천~수만 chip에 대해 teacher ensemble로 pseudo-label 후보를 만든다.
-- 라벨 요청 우선순위는 `high-confidence target class`, `image-tabular disagreement`, `high uncertainty`, `embedding cluster representative`를 섞어 선정한다.
-- pseudo-label은 high-confidence 샘플만 낮은 loss weight로 학습에 포함한다.
-- validation/test에는 pseudo-label을 절대 포함하지 않는다.
-- active learning simulation으로 random sampling 대비 KPI 목표치에 도달하는 라벨 수를 비교한다.
+### EDS Tabular Dataset
 
-## Interfaces And Artifacts
+Recommended local layout:
 
-### Data Manifest
+```text
+data/raw/eds_tabular/eds_tabular.csv
+data/metadata/eds_test_item_wordline_map.csv
+```
 
-Chip 단위 manifest는 다음 컬럼을 가진다.
+`eds_tabular.csv` is wide-form:
 
-- `chip_id`
-- `image_path`
-- `label_vector` 또는 defect label columns
-- `is_real`
-- `is_synthetic`
-- `is_pseudo_labeled`
-- `label_cardinality`
-- `wafer_position`
-- `split`
-- `MSR_*` feature columns
+```csv
+sample_id,split,eval_group,label_ERS_0,label_ERS_1,EDS_RD_WL000,EDS_GLOBAL_IDDQ
+CHIP_000001,train,real_single,1,0,12.4,5.1
+```
 
-### Measurement Mapping Table
+`eds_test_item_wordline_map.csv` is feature-level metadata:
 
-권장 파일명은 `measurement_map.csv`이다.
+```csv
+feature_name,eds_step,eds_item,wordline_position,value_direction,include_in_catboost,notes
+EDS_RD_WL000,READ,RD_LEAK,0,high_bad,1,single WL feature
+EDS_GLOBAL_IDDQ,IDDQ,IDDQ_TOTAL,,high_bad,1,global scalar
+```
 
-필수 컬럼:
+Rules:
 
-- `feature_name`
-- `measurement_condition`
-- `measurement_type`
+- `wordline_position` exists -> feature can enter WL residual maps.
+- blank `wordline_position` + `include_in_catboost=1` -> scalar CatBoost-only feature.
+- `value_direction=low_bad` is sign-flipped before residualization so all WL residuals remain high-side.
+- label columns and metadata columns are not CatBoost features.
 
-위치 정보 컬럼:
+## Residual Definition
 
-- `wl_index`
-- `physical_region`
-- `physical_order`
+For raw measurement `x`, test method `t`, and WL bin `b`:
 
-규칙:
+```text
+R = max(0, (x - median_train_real(t, b)) / (IQR_train_real(t, b) + eps))
+```
 
-- `feature_name`은 `MSR_000` 같은 원천 feature명과 정확히 매칭한다.
-- `wl_index`는 실제 WL 위치가 확인된 경우에만 사용한다.
-- `physical_region`은 최소 `top`, `middle`, `bottom`, `unknown` 중 하나로 둔다.
-- `physical_order`는 raw feature 정렬용이 아니라 위치 metadata로만 사용한다.
+Default tensor shape:
 
-### Model Outputs
+```text
+[C, B, T]
+C = mean_residual, max_residual, std_residual, observed_mask, count_ratio, source_count_norm
+B = WL bins, default 20
+T = discovered train test methods unless configured
+```
 
-모든 모델은 label별로 다음 값을 저장한다.
+Fit scope is train real only. If IQR is zero/missing, fallback order is test-method IQR -> global IQR -> 1.0.
 
-- `probability`
-- `binary_prediction`
-- `threshold`
-- `uncertainty`
+## Synthetic WL Policy
 
-Multi-modal 모델은 추가로 다음 값을 저장한다.
+Synthetic composite WL maps are composed from parent residual maps:
 
-- `image_only_probability`
-- `tabular_only_probability`
-- `fusion_probability`
-- `human_review_flag`
+```text
+value channels      = max(parent_a, parent_b)
+observed_mask       = observed_a OR observed_b
+source_count_norm   = (observed_a + observed_b) / 2
+default loss weight = 0.2
+```
 
-### Reports
+This is an auxiliary training signal only. It is not a synthetic raw tabular row.
 
-실험 리포트는 다음 항목을 포함한다.
+## CatBoost OOF Policy
 
-- single/composite subset acc
-- KPI product
-- per-class F1/recall
-- class-pair acc
-- threshold table
-- synthetic-to-real gap table
-- label cost curve
+CatBoost is trained offline as one binary classifier per class.
 
-## Test Plan
+- Train rows: real train only.
+- Synthetic rows: excluded.
+- Train logits: OOF only.
+- Validation/test logits: fold-ensemble mean probability, converted to logit.
+- Output directory: `outputs/catboost_logits/`.
+- Artifacts: train/eval logit tables, `metadata.json`, `warnings.txt`, and pickled fold models under `models/`.
 
-- image intensity가 `0~8` 범위에서 `/8`로 정규화되는지 확인한다.
-- `MSR_*` feature가 raw 번호 순서로 물리 위치 처리되지 않는지 확인한다.
-- `measurement_map.csv`의 feature coverage를 계산하고, mapping 누락 feature 비율을 기록한다.
-- real test set에 synthetic sample이나 pseudo-label sample이 섞이지 않는지 확인한다.
-- 상하 flip ablation에서는 image와 mapped physical region이 함께 변환되는 조건과 비활성 조건을 분리한다.
-- 모든 핵심 실험은 최소 3개 seed로 반복하고 평균, 표준편차, confidence interval을 기록한다.
-- active learning은 동일 라벨 budget에서 random sampling, uncertainty sampling, disagreement sampling, cluster representative sampling을 비교한다.
-- 조건 평가기는 `single >= 0.8`, `composite >= 0.6`, `single * composite >= 0.65`를 별도 gate로 보고, 개별 최소값은 만족하지만 product를 만족하지 못하는 조건을 실패로 분류한다.
+If parquet support is unavailable, the trainer writes CSV fallbacks and records a warning.
+
+## Fusion Model Policy
+
+Current implemented fusion formula:
+
+```text
+fusion_logits =
+    fbm_logits
+    + has_wl_map * gate_wl[class] * wl_logits
+    + has_catboost_logits * gate_cat[class] * catboost_logits
+```
+
+`gate_wl` and `gate_cat` are class-wise, not global modality gates. CatBoost logits are direct offline logits; the neural model does not train CatBoost itself.
+
+Default loss intent:
+
+| Sample type | FBM loss | WL loss | Fusion loss | CatBoost neural loss |
+|---|---:|---:|---:|---:|
+| real_single | 1.0 | 1.0 | 1.0 | 0 |
+| real_composite | 1.0 | 1.0 | 1.0 | 0 |
+| synthetic_composite image-only | 1.0 | 0 | 0 | 0 |
+| synthetic_composite with synthetic WL | 1.0 | 0.2 | 0.2 | 0 |
+
+## Evaluation Policy
+
+Official groups:
+
+- `real_single`
+- `real_composite`
+- `real_all` = real_single + real_composite
+
+Synthetic rows are auxiliary diagnostics only. Fusion gain is computed from real single/composite KPI, not synthetic rows.
+
+Required leakage checks:
+
+1. WL baseline fit sample IDs are a subset of train real sample IDs.
+2. CatBoost train logits metadata says `train_prediction_mode=oof`.
+3. CatBoost metadata says synthetic rows were excluded.
+4. Synthetic rows are not marked as official metric rows.
+5. Pseudo-labeling remains disabled unless explicitly enabled.
+
+## Experiment Sequence
+
+### E0. Existing Baseline Reproduction
+
+Run the current numpy FBM + tabular fusion demo and condition evaluator.
+
+Purpose:
+
+- Preserve the previous baseline behavior.
+- Confirm report generation and tests still pass.
+
+### E1. CatBoost Logit Branch
+
+Use FBM logits + CatBoost OOF/fold-ensemble logits. Do not use WL residual maps.
+
+Purpose:
+
+- Measure scalar EDS/tabular information gain.
+- Verify OOF train logits and synthetic exclusion.
+
+### E2. WL Residual Map Branch
+
+Use FBM + WL residual map + CatBoost logits on real samples. Do not use synthetic WL maps yet.
+
+Purpose:
+
+- Check whether WL-profile patterns add information beyond scalar CatBoost features.
+- Inspect missing coverage and source/count channels.
+
+### E3. Synthetic WL Residual Map
+
+Use FBM synthetic composites plus synthetic WL residual maps from parent max/union composition.
+
+Purpose:
+
+- Test whether low-weight synthetic WL helps scarce real composite performance without raw tabular generation.
+
+### E4. Synthetic WL Weight Ablation
+
+Sweep:
+
+```text
+synthetic_wl_weight = 0.0 / 0.1 / 0.2 / 0.3
+synthetic_fusion_weight = 0.0 / 0.1 / 0.2
+```
+
+Purpose:
+
+- Select a conservative auxiliary weight based on real composite validation, not synthetic validation.
+
+### E5. Pseudo-labeling Off-State Check
+
+Keep:
+
+```yaml
+pseudo_labeling:
+  enabled: false
+```
+
+Purpose:
+
+- Confirm no unlabeled loader or pseudo-label sample injection is called.
+- Keep `select_pairwise_topk()` tested for future use only.
+
+## Commands
+
+Validate EDS mapping:
+
+```bash
+PYTHONPATH=src python3 -m fbm_multimodal.cli validate-eds-map \
+  --eds data/raw/eds_tabular/eds_tabular.csv \
+  --mapping data/metadata/eds_test_item_wordline_map.csv \
+  --label-columns label_ERS_0,label_ERS_1
+```
+
+Build long-form WL measurements:
+
+```bash
+PYTHONPATH=src python3 -m fbm_multimodal.cli build-wl-measurements \
+  --eds data/raw/eds_tabular/eds_tabular.csv \
+  --mapping data/metadata/eds_test_item_wordline_map.csv \
+  --output data/interim/wl_measurements.csv
+```
+
+Fit/cache WL residual maps:
+
+```bash
+PYTHONPATH=src python3 - <<'PY'
+import pandas as pd
+from fbm_multimodal.wl_residual_map import WLResidualMapTensorizer
+
+measurements = pd.read_csv("data/interim/wl_measurements.csv")
+tensorizer = WLResidualMapTensorizer(num_wl_bins=20, clip_max=10.0)
+tensorizer.fit(measurements)
+tensorizer.save("data/interim/wl_residual_tensorizer.json")
+maps = tensorizer.transform(measurements)
+tensorizer.save_tensor_cache(maps, "data/interim/wl_maps.npz")
+print(len(tensorizer.fit_sample_ids_), len(maps))
+PY
+```
+
+Train CatBoost OOF logits:
+
+```bash
+PYTHONPATH=src python3 -m fbm_multimodal.training.train_catboost_oof \
+  --features data/raw/eds_tabular/eds_tabular.csv \
+  --labels data/raw/eds_tabular/eds_tabular.csv \
+  --label-columns label_ERS_0,label_ERS_1 \
+  --output-dir outputs/catboost_logits \
+  --sample-id-column sample_id \
+  --split-column split \
+  --synthetic-column is_synthetic \
+  --num-folds 5
+```
+
+Run tests:
+
+```bash
+PYTHONPATH=src python3 -m pytest -q
+```
+
+## Acceptance Criteria
+
+- Existing baseline tests remain green.
+- WL tensors are `[C, B, T]` and fit baseline from train real only.
+- Synthetic WL maps use union mask and source_count channel.
+- CatBoost train logits are OOF and synthetic rows are excluded.
+- Fusion path can consume FBM features, WL maps, and CatBoost logits with masks.
+- Pseudo-labeling default remains off.
+- Official metrics remain real-only: `real_single`, `real_composite`, `real_all`.
 
 ## Assumptions
 
-- `MSR_000` ~ `MSR_200` 번호 자체는 물리 WL 순서를 의미하지 않는다.
-- feature와 WL/측정조건을 연결하는 mapping table은 제공 가능하다.
-- synthetic tabular는 생성하지 않는다.
-- 실제 중첩 데이터가 적으므로, 단일 subset acc와 중첩 subset acc 외에 class-pair별 결과와 synthetic-to-real gap을 반드시 함께 판단한다.
-- 1차 평가는 `chip random split`으로 진행하고, wafer/lot/time metadata가 확보되면 추가 stress test로 확장한다.
+- Real raw data is not committed; local files live under `data/raw/`.
+- The repo still uses a dependency-light numpy fusion implementation for smoke tests.
+- CatBoost is optional; install `catboost` only for real CatBoost training.
+- Parquet output requires `pyarrow` or `fastparquet`; otherwise CSV fallback is expected.
